@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stage Timer Display</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="stage-body">
+    <main class="stage-shell">
+      <section class="stage-frame theme-normal" data-stage-shell>
+
+        <div class="stage-header">
+          <img src="/compass-logo.png" alt="Compass Events" class="stage-logo">
+        </div>
+
+        <div class="stage-center">
+          <div class="stage-session" data-stage-session data-visible="false"></div>
+          <div class="stage-timer" data-stage-timer>15:00</div>
+          <div class="stage-message" data-stage-message></div>
+        </div>
+
+
+
+      </section>
+    </main>
+    <!-- Alert Overlay -->
+    <div class="stage-alert-overlay" data-stage-alert-overlay data-active="false" data-alert="">
+      <div class="stage-alert-card" data-stage-alert-card>
+        <div class="stage-alert-icon-wrap" data-stage-alert-icon>
+          <div class="stage-alert-ring"></div>
+          <div class="stage-alert-ring"></div>
+          <div class="stage-alert-ring"></div>
+          <svg class="icon-mic" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="9" y="1" width="6" height="13" rx="3"/>
+            <path d="M5 11a7 7 0 0014 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="icon-voice" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 010 14.14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M15.54 8.46a5 5 0 010 7.07" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg class="icon-wrapup" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <rect x="4" y="2" width="16" height="3" rx="1.5"/>
+            <rect x="4" y="19" width="16" height="3" rx="1.5"/>
+            <path d="M6 5C8 8 11 11 12 12C13 11 16 8 18 5Z"/>
+            <path d="M6 19C8 16 11 13 12 12C13 13 16 16 18 19Z"/>
+          </svg>
+        </div>
+        <p class="stage-alert-headline" data-stage-alert-headline></p>
+        <p class="stage-alert-sub" data-stage-alert-sub></p>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

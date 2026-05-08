@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stage Timer — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="dashboard-body">
+    <main class="dashboard-shell">
+
+      <!-- ── Main Grid ── -->
+      <section class="dashboard-grid">
+
+        <!-- ────────────────────────────────── Left Column ── -->
+        <div class="panel hero-timer">
+
+          <div class="hero-timer-top">
+            <span class="status-pill" data-status-pill>Paused</span>
+            <a class="stage-link" href="/stage" target="_blank" rel="noreferrer">
+              Open Stage
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M7 17L17 7M7 7h10v10"/>
+              </svg>
+            </a>
+          </div>
+
+          <div class="timer-readout" data-timer-readout>15:00</div>
+
+          <div class="checkbox-row">
+            <label class="checkbox-field" for="blinkEnabled">
+              <span>Blink When Time Runs Out</span>
+              <input id="blinkEnabled" name="blinkEnabled" type="checkbox" checked>
+            </label>
+            <label class="checkbox-field" for="showSessionLabel">
+              <span>Show Session Label on Stage</span>
+              <input id="showSessionLabel" name="showSessionLabel" type="checkbox">
+            </label>
+          </div>
+
+          <div class="meta-grid">
+            <article class="meta-card">
+              <span class="meta-label">Session</span>
+              <strong class="meta-value" data-stage-value>Main Stage</strong>
+            </article>
+            <article class="meta-card">
+              <span class="meta-label">Duration</span>
+              <strong class="meta-value" data-duration-value>15 min</strong>
+            </article>
+            <article class="meta-card message-card">
+              <span class="meta-label">Message</span>
+              <strong class="meta-value" data-message-value>None</strong>
+            </article>
+          </div>
+
+          <div class="button-row three">
+            <button class="primary" data-start>Start</button>
+            <button class="secondary" data-pause>Pause</button>
+            <button class="secondary" data-reset>Reset</button>
+          </div>
+          <div class="button-row">
+            <button class="warning" data-subtract-minute>− 1 min</button>
+            <button class="primary" data-add-minute>+ 1 min</button>
+          </div>
+          <div class="button-row">
+            <button class="warning" data-subtract-five-minutes>− 5 min</button>
+            <button class="primary" data-add-five-minutes>+ 5 min</button>
+          </div>
+          <div class="button-row">
+            <button class="danger" data-stop>Stop &amp; Clear</button>
+            <button class="secondary" data-show-time>Show Clock</button>
+          </div>
+
+          <!-- Quick Alerts -->
+          <section class="quick-alerts-panel">
+            <span class="panel-label">Quick Alerts</span>
+            <div class="button-row three">
+              <button class="alert-btn alert-mic" type="button" data-alert-mic>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <rect x="9" y="1" width="6" height="13" rx="3"/>
+                  <path d="M5 11a7 7 0 0014 0" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                  <line x1="12" y1="18" x2="12" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                  <line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+                Hold Mic Closer
+              </button>
+              <button class="alert-btn alert-voice" type="button" data-alert-voice>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                  <path d="M19.07 4.93a10 10 0 010 14.14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                  <path d="M15.54 8.46a5 5 0 010 7.07" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                </svg>
+                Project Voice
+              </button>
+              <button class="alert-btn alert-wrapup" type="button" data-alert-wrapup>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <rect x="4" y="2" width="16" height="3" rx="1.5"/>
+                  <rect x="4" y="19" width="16" height="3" rx="1.5"/>
+                  <path d="M6 5C8 8 11 11 12 12C13 11 16 8 18 5Z"/>
+                  <path d="M6 19C8 16 11 13 12 12C13 13 16 16 18 19Z"/>
+                </svg>
+                Please Wrap Up
+              </button>
+            </div>
+          </section>
+
+          <!-- Live Message -->
+          <section class="live-message-panel">
+            <span class="panel-label">Live Message</span>
+            <div class="form-grid">
+              <label for="liveMessage">
+                Active Speaker Message
+                <input id="liveMessage" name="liveMessage" type="text" value="" placeholder="Type a message to display on stage">
+              </label>
+              <div class="button-row">
+                <button class="primary" type="button" data-send-message>Send Message</button>
+                <button class="secondary" type="button" data-clear-message>Clear</button>
+              </div>
+            </div>
+          </section>
+
+        </div>
+
+        <!-- ────────────────────────────────── Right Column ── -->
+        <div class="control-stack">
+
+          <!-- Session Settings -->
+          <div class="panel">
+            <span class="panel-label">Session Settings</span>
+            <form class="form-grid" data-settings-form>
+              <label for="sessionLabel">
+                Session Label
+                <input id="sessionLabel" name="sessionLabel" type="text" value="">
+              </label>
+              <label for="durationMinutes">
+                Duration (minutes)
+                <input id="durationMinutes" name="durationMinutes" type="number" min="1" value="15">
+              </label>
+              <label for="warningThreshold">
+                Warning Threshold (seconds)
+                <input id="warningThreshold" name="warningThreshold" type="number" min="0" value="120">
+              </label>
+              <button class="primary" type="submit">Apply Settings</button>
+            </form>
+          </div>
+
+          <!-- Session Queue -->
+          <div class="panel">
+            <section class="queue-panel">
+              <div class="queue-panel-header queue-panel-header-row">
+                <div>
+                  <h2>Session Queue</h2>
+                </div>
+                <button class="danger" type="button" data-queue-clear>Clear All</button>
+                <button class="secondary" type="button" data-queue-toggle>Collapse Queue</button>
+              </div>
+              <div class="queue-panel-body" data-queue-panel-body>
+                <form class="form-grid" data-queue-form>
+                  <label for="queueSpeakerName">
+                    Session Label
+                    <input id="queueSpeakerName" name="queueSpeakerName" type="text" placeholder="Add next session label" required>
+                  </label>
+                  <label for="queueDurationMinutes">
+                    Preset Minutes
+                    <input id="queueDurationMinutes" name="queueDurationMinutes" type="number" min="1" value="15">
+                  </label>
+                  <label for="queueWarningThreshold">
+                    Warning Threshold (seconds)
+                    <input id="queueWarningThreshold" name="queueWarningThreshold" type="number" min="0" value="120">
+                  </label>
+                  <button class="primary" type="submit">Add To Queue</button>
+                </form>
+                <div class="queue-list" data-queue-list>
+                  <div class="queue-empty">No speakers queued yet.</div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <!-- Count Up -->
+          <div class="panel">
+            <section class="queue-panel">
+              <div class="queue-panel-header">
+                <h2>Count Up</h2>
+                <p data-countup-status>Inactive</p>
+              </div>
+              <div class="form-grid">
+                <label for="countupSessionLabel">
+                  Count Up Session Label
+                  <input id="countupSessionLabel" name="countupSessionLabel" type="text" value="Count Up">
+                </label>
+              </div>
+              <div class="button-row three">
+                <button class="primary" type="button" data-countup-start>Start</button>
+                <button class="secondary" type="button" data-countup-pause>Pause</button>
+                <button class="secondary" type="button" data-countup-reset>Reset</button>
+              </div>
+            </section>
+          </div>
+
+        </div>
+        <!-- /right column -->
+
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

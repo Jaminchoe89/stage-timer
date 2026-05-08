@@ -1,0 +1,9 @@
+{
+  "name": "stage-timer-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web app for controlling a stage timer display and speaker dashboard.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
