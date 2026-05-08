@@ -104,13 +104,10 @@ function bindDashboard() {
   const statusPill = document.querySelector("[data-status-pill]");
   const stageValue = document.querySelector("[data-stage-value]");
   const durationValue = document.querySelector("[data-duration-value]");
+  const warningValue = document.querySelector("[data-warning-value]");
   const messageValue = document.querySelector("[data-message-value]");
-  const sessionInput = document.querySelector("#sessionLabel");
-  const durationInput = document.querySelector("#durationMinutes");
-  const warningInput = document.querySelector("#warningThreshold");
   const blinkEnabledInput = document.querySelector("#blinkEnabled");
-  const showSessionLabelInput = document.querySelector("#showSessionLabel");
-  const countupSessionLabelInput = document.querySelector("#countupSessionLabel");
+  const showSessionToggleBtn = document.querySelector("[data-show-session-toggle]");
   const queueSpeakerNameInput = document.querySelector("#queueSpeakerName");
   const queueDurationInput = document.querySelector("#queueDurationMinutes");
   const queueWarningThresholdInput = document.querySelector("#queueWarningThreshold");
@@ -125,16 +122,10 @@ function bindDashboard() {
   const countupStatus = document.querySelector("[data-countup-status]");
   let latestState = null;
   let liveMessageDraftDirty = false;
-  let queueCollapsed = true;
+  let queueCollapsed = false;
   let dashClockInterval = null;
 
-  function syncField(input, value) {
-    if (document.activeElement !== input) {
-      input.value = value;
-    }
-  }
-
-  function refreshLiveMessageButton(state) {
+function refreshLiveMessageButton(state) {
     const currentState = state || latestState;
     const draft = liveMessageInput.value.trim();
 
@@ -152,22 +143,25 @@ function bindDashboard() {
       const theme = deriveTheme(state);
       if (state.clockMode) {
         if (!dashClockInterval) {
-          dashClockInterval = setInterval(() => { timerReadout.textContent = formatWallClock(); }, 1000);
+          dashClockInterval = setInterval(() => { if (timerReadout) timerReadout.textContent = formatWallClock(); }, 1000);
         }
-        timerReadout.textContent = formatWallClock();
+        if (timerReadout) timerReadout.textContent = formatWallClock();
       } else {
         if (dashClockInterval) { clearInterval(dashClockInterval); dashClockInterval = null; }
-        timerReadout.textContent = state.timerVisible ? formatClock(displayMs(state)) : "--:--";
+        if (timerReadout) timerReadout.textContent = state.timerVisible ? formatClock(displayMs(state)) : "--:--";
       }
-      statusPill.textContent = state.timerMode === "countup"
+      if (statusPill) statusPill.textContent = state.timerMode === "countup"
         ? state.running ? "Count Up Live" : "Count Up Ready"
         : state.running ? "Running live" : state.remainingMs === 0 ? "Time elapsed" : "Paused";
       stageValue.textContent = state.sessionLabel;
       durationValue.textContent = state.timerMode === "countup" ? "Count Up" : formatDuration(state.totalSeconds);
-      messageValue.textContent = state.customMessage
-        ? state.messageVisible ? state.customMessage : "Hidden"
-        : "None";
-      messageValue.dataset.hiddenState = String(!!state.customMessage && !state.messageVisible);
+      if (warningValue) warningValue.textContent = `${state.warningThresholdSeconds}s`;
+      if (messageValue) {
+        messageValue.textContent = state.customMessage
+          ? state.messageVisible ? state.customMessage : "Hidden"
+          : "None";
+        messageValue.dataset.hiddenState = String(!!state.customMessage && !state.messageVisible);
+      }
       countupStatus.textContent = state.timerMode === "countup"
         ? state.running ? "Active on stage" : "Ready on stage"
         : "Inactive";
@@ -175,23 +169,18 @@ function bindDashboard() {
       if (alertMicBtn) alertMicBtn.dataset.active = String(state.activeAlert === "mic");
       if (alertVoiceBtn) alertVoiceBtn.dataset.active = String(state.activeAlert === "voice");
       if (alertWrapupBtn) alertWrapupBtn.dataset.active = String(state.activeAlert === "wrapup");
-      syncField(sessionInput, state.sessionLabel);
-      syncField(countupSessionLabelInput, state.countupSessionLabel);
-      syncField(durationInput, String(Math.max(1, Math.round(state.totalSeconds / 60))));
-      syncField(warningInput, String(state.warningThresholdSeconds));
-      blinkEnabledInput.checked = state.blinkEnabled;
-      showSessionLabelInput.checked = !!state.showSessionLabel;
+      if (blinkEnabledInput) blinkEnabledInput.checked = !!state.blinkEnabled;
+      if (showSessionToggleBtn) showSessionToggleBtn.dataset.active = String(!!state.showSessionLabel);
       if (!liveMessageDraftDirty && document.activeElement !== liveMessageInput) {
         liveMessageInput.value = state.customMessage;
       }
       refreshLiveMessageButton(state);
       document.body.dataset.theme = theme;
-      document.body.dataset.blinkEnabled = String(state.blinkEnabled);
       queuePanelBody.hidden = queueCollapsed;
       queueToggle.textContent = queueCollapsed ? "Expand Queue" : "Collapse Queue";
 
       queueList.innerHTML = state.queuedSpeakers.length === 0
-        ? '<div class="queue-empty">No speakers queued yet.</div>'
+        ? '<div class="queue-empty">No sessions queued yet.</div>'
         : state.queuedSpeakers
             .map((speaker, index) => `
               <article class="queue-item">
@@ -229,23 +218,19 @@ function bindDashboard() {
   document.querySelector("[data-subtract-five-minutes]").addEventListener("click", () => sendAction("subtractFiveMinutes"));
   document.querySelector("[data-show-time]").addEventListener("click", () => sendAction("showTime"));
 
-  document.querySelector("[data-settings-form]").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await postState({
-      sessionLabel: sessionInput.value,
-      totalSeconds: Number(durationInput.value) * 60,
-      warningThresholdSeconds: Number(warningInput.value),
-      blinkEnabled: blinkEnabledInput.checked
+
+  if (blinkEnabledInput) {
+    blinkEnabledInput.addEventListener("change", async () => {
+      await postState({ blinkEnabled: blinkEnabledInput.checked });
     });
-  });
+  }
 
-  blinkEnabledInput.addEventListener("change", async () => {
-    await postState({ blinkEnabled: blinkEnabledInput.checked });
-  });
-
-  showSessionLabelInput.addEventListener("change", async () => {
-    await postState({ showSessionLabel: showSessionLabelInput.checked });
-  });
+  if (showSessionToggleBtn) {
+    showSessionToggleBtn.addEventListener("click", async () => {
+      const next = showSessionToggleBtn.dataset.active !== "true";
+      await postState({ showSessionLabel: next });
+    });
+  }
 
   document.querySelector("[data-queue-form]").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -363,19 +348,20 @@ function bindDashboard() {
     }
   });
 
-  document.querySelector("[data-countup-start]").addEventListener("click", async () => {
-    await postState({
-      countupSessionLabel: countupSessionLabelInput.value,
-      action: "startCountup"
-    });
-  });
+  document.querySelector("[data-countup-start]").addEventListener("click", () => sendAction("startCountup"));
   document.querySelector("[data-countup-pause]").addEventListener("click", () => sendAction("pauseCountup"));
-  document.querySelector("[data-countup-reset]").addEventListener("click", async () => {
-    await postState({
-      countupSessionLabel: countupSessionLabelInput.value,
-      action: "resetCountup"
-    });
-  });
+  document.querySelector("[data-countup-reset]").addEventListener("click", () => sendAction("resetCountup"));
+
+  const previewWrapper = document.querySelector(".stage-preview-wrapper");
+  const previewIframe = document.querySelector(".stage-preview-iframe");
+  if (previewWrapper && previewIframe) {
+    const scalePreview = () => {
+      const scale = previewWrapper.clientWidth / 1920;
+      previewIframe.style.transform = `scale(${scale})`;
+    };
+    new ResizeObserver(scalePreview).observe(previewWrapper);
+    scalePreview();
+  }
 
   window.addEventListener("beforeunload", () => { sub.close(); if (dashClockInterval) clearInterval(dashClockInterval); });
 }
@@ -395,9 +381,9 @@ function bindStage() {
   let alertDismissTimer = null;
 
   const ALERT_CONTENT = {
-    mic:    { headline: "Hold Mic Closer",   sub: "Bring your microphone closer to your mouth" },
-    voice:  { headline: "Project Your Voice", sub: "Speak up — let your voice fill the room" },
-    wrapup: { headline: "Please Wrap Up",    sub: "Begin wrapping up your session" }
+    mic:    { headline: "Hold Mic Closer" },
+    voice:  { headline: "Project Your Voice" },
+    wrapup: { headline: "Please Wrap Up" }
   };
 
   let motionAnimate = null;

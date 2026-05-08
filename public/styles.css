@@ -227,14 +227,14 @@ body.dashboard-body {
   display: grid;
   gap: 18px;
   align-content: start;
-  overflow-y: auto;
+  position: relative;
 }
 
-.hero-timer-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.hero-stage-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
 }
 
 /* Status Pill */
@@ -355,6 +355,60 @@ body[data-theme="finished"][data-blink-enabled="true"] .timer-readout {
 
 .meta-value[data-hidden-state="true"] {
   opacity: 0.06;
+}
+
+.meta-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-value-row .meta-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.eye-toggle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-3);
+  box-shadow: none;
+  transition: color 160ms, background 160ms;
+}
+
+.eye-toggle:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-2);
+  transform: none;
+}
+
+.eye-toggle:active { transform: none; }
+
+.eye-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.eye-toggle[data-active="false"] .icon-eye-open,
+.eye-toggle[data-active="true"]  .icon-eye-off  { display: none; }
+
+.eye-toggle[data-active="true"] {
+  color: var(--accent-hi);
+  animation: eye-blink 1.8s ease-in-out infinite;
+}
+
+@keyframes eye-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.15; }
 }
 
 /* ─── Button System ─────────────────────────────────────────────────────────── */
@@ -810,6 +864,56 @@ body.stage-body {
   50%, 100% { opacity: 0.18; }
 }
 
+/* ─── Preview + Meta Row ────────────────────────────────────────────────────── */
+.preview-meta-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.stage-preview-compact {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-meta-row .meta-grid {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  grid-template-columns: none;
+  width: 38%;
+}
+
+.stage-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.stage-preview-wrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: #03050a;
+  border: 1px solid var(--panel-border);
+}
+
+.stage-preview-iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+  border: none;
+  pointer-events: none;
+}
+
 /* ─── Quick Alert Buttons (Dashboard) ──────────────────────────────────────── */
 .quick-alerts-panel {
   padding: 16px 18px 18px;
@@ -1018,6 +1122,8 @@ button.alert-wrapup[data-active="true"] {
   max-width: 72vw;
   text-wrap: balance;
 }
+
+.stage-alert-sub:empty { display: none; }
 
 /* Icon visibility */
 .stage-alert-overlay:not([data-alert="mic"])    .icon-mic,

@@ -18,42 +18,49 @@
         <!-- ────────────────────────────────── Left Column ── -->
         <div class="panel hero-timer">
 
-          <div class="hero-timer-top">
-            <span class="status-pill" data-status-pill>Paused</span>
-            <a class="stage-link" href="/stage" target="_blank" rel="noreferrer">
-              Open Stage
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M7 17L17 7M7 7h10v10"/>
-              </svg>
-            </a>
-          </div>
-
-          <div class="timer-readout" data-timer-readout>15:00</div>
-
-          <div class="checkbox-row">
-            <label class="checkbox-field" for="blinkEnabled">
-              <span>Blink When Time Runs Out</span>
-              <input id="blinkEnabled" name="blinkEnabled" type="checkbox" checked>
-            </label>
-            <label class="checkbox-field" for="showSessionLabel">
-              <span>Show Session Label on Stage</span>
-              <input id="showSessionLabel" name="showSessionLabel" type="checkbox">
-            </label>
-          </div>
-
-          <div class="meta-grid">
+          <div class="preview-meta-row">
+            <div class="stage-preview-compact">
+              <div class="stage-preview-wrapper">
+                <a class="stage-link hero-stage-link" href="/stage" target="_blank" rel="noreferrer">
+                  Open Stage
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M7 17L17 7M7 7h10v10"/>
+                  </svg>
+                </a>
+                <iframe class="stage-preview-iframe" src="/stage" scrolling="no" tabindex="-1"></iframe>
+              </div>
+            </div>
+            <div class="meta-grid">
             <article class="meta-card">
               <span class="meta-label">Session</span>
-              <strong class="meta-value" data-stage-value>Main Stage</strong>
+              <div class="meta-value-row">
+                <strong class="meta-value" data-stage-value>Main Stage</strong>
+                <button class="eye-toggle" type="button" data-show-session-toggle data-active="false" title="Show on stage">
+                  <svg class="icon-eye-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
+                    <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                </button>
+              </div>
             </article>
             <article class="meta-card">
               <span class="meta-label">Duration</span>
               <strong class="meta-value" data-duration-value>15 min</strong>
             </article>
-            <article class="meta-card message-card">
-              <span class="meta-label">Message</span>
-              <strong class="meta-value" data-message-value>None</strong>
+            <article class="meta-card">
+              <span class="meta-label">Warning Threshold</span>
+              <strong class="meta-value" data-warning-value>120s</strong>
             </article>
+            <label class="checkbox-field" for="blinkEnabled">
+              <span>Blink When Time Runs Out</span>
+              <input id="blinkEnabled" name="blinkEnabled" type="checkbox" checked>
+            </label>
+            </div>
           </div>
 
           <div class="button-row three">
@@ -127,26 +134,6 @@
         <!-- ────────────────────────────────── Right Column ── -->
         <div class="control-stack">
 
-          <!-- Session Settings -->
-          <div class="panel">
-            <span class="panel-label">Session Settings</span>
-            <form class="form-grid" data-settings-form>
-              <label for="sessionLabel">
-                Session Label
-                <input id="sessionLabel" name="sessionLabel" type="text" value="">
-              </label>
-              <label for="durationMinutes">
-                Duration (minutes)
-                <input id="durationMinutes" name="durationMinutes" type="number" min="1" value="15">
-              </label>
-              <label for="warningThreshold">
-                Warning Threshold (seconds)
-                <input id="warningThreshold" name="warningThreshold" type="number" min="0" value="120">
-              </label>
-              <button class="primary" type="submit">Apply Settings</button>
-            </form>
-          </div>
-
           <!-- Session Queue -->
           <div class="panel">
             <section class="queue-panel">
@@ -186,12 +173,6 @@
               <div class="queue-panel-header">
                 <h2>Count Up</h2>
                 <p data-countup-status>Inactive</p>
-              </div>
-              <div class="form-grid">
-                <label for="countupSessionLabel">
-                  Count Up Session Label
-                  <input id="countupSessionLabel" name="countupSessionLabel" type="text" value="Count Up">
-                </label>
               </div>
               <div class="button-row three">
                 <button class="primary" type="button" data-countup-start>Start</button>

@@ -19,7 +19,7 @@ const defaultState = () => ({
   blinkEnabled: true,
   showSessionLabel: false,
   timerVisible: true,
-  clockMode: false,
+  clockMode: true,
   activeAlert: null,
   alertExpiresAt: null,
   timerMode: "countdown",
