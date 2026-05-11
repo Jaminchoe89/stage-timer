@@ -690,11 +690,17 @@ body.stage-body {
   background: #03050a;
   color: #ffffff;
   overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 
 .stage-shell {
   min-height: 100vh;
-  padding: 5vh 7vw;
+  min-height: 100dvh;
+  padding: max(5vh, env(safe-area-inset-top, 0px))
+           max(7vw, env(safe-area-inset-right, 0px))
+           max(5vh, env(safe-area-inset-bottom, 0px))
+           max(7vw, env(safe-area-inset-left, 0px));
   display: grid;
 }
 
@@ -1177,9 +1183,62 @@ button.alert-wrapup[data-active="true"] {
 
   .db-topbar { flex-wrap: wrap; }
 
-  .stage-shell { padding: 4vh 5vw; }
+  .stage-shell {
+    padding: max(4vh, env(safe-area-inset-top, 0px))
+             max(5vw, env(safe-area-inset-right, 0px))
+             max(4vh, env(safe-area-inset-bottom, 0px))
+             max(5vw, env(safe-area-inset-left, 0px));
+  }
 
   .stage-message { max-width: 88vw; }
+}
+
+/* ─── Stage Portrait Orientation ────────────────────────────────────────────── */
+@media (orientation: portrait) {
+  .stage-timer {
+    font-size: clamp(8rem, 38vw, 22rem);
+  }
+
+  .stage-session {
+    font-size: clamp(1rem, 4vw, 2.6rem);
+    letter-spacing: 0.18em;
+  }
+
+  .stage-message {
+    font-size: clamp(1.4rem, 5vw, 3.2rem);
+    max-width: 90vw;
+  }
+
+  .stage-center { gap: 2vh; }
+
+  .stage-header { padding: 1.5vh 0 2.5vh; }
+
+  .stage-logo { height: clamp(2rem, 5vh, 4.5rem); }
+
+  .stage-alert-headline { font-size: clamp(3rem, 12vw, 10rem); }
+
+  .stage-alert-sub {
+    font-size: clamp(1.2rem, 5vw, 3.2rem);
+    max-width: 88vw;
+  }
+
+  .stage-alert-icon-wrap {
+    width: clamp(70px, 20vw, 160px);
+    height: clamp(70px, 20vw, 160px);
+  }
+}
+
+/* ─── Stage Short Landscape (small phones horizontal) ───────────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  .stage-header { padding: 1vh 0 1.5vh; }
+
+  .stage-logo { height: clamp(1.8rem, 5vh, 3.5rem); }
+
+  .stage-center { gap: 1.5vh; }
+
+  .stage-timer { font-size: clamp(6rem, 22vw, 22rem); }
+
+  .stage-session { top: 2vh; }
 }
 
 @media (prefers-reduced-motion: reduce) {
