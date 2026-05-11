@@ -391,6 +391,20 @@ function bindStage() {
     .then((mod) => { motionAnimate = mod.animate; })
     .catch(() => {});
 
+  let resizeFitTimer = null;
+  function fitTimerFont() {
+    timer.style.fontSize = '';
+    const available = timer.parentElement.clientWidth;
+    if (timer.scrollWidth > available * 0.97) {
+      const px = parseFloat(getComputedStyle(timer).fontSize);
+      timer.style.fontSize = Math.floor(px * available / timer.scrollWidth * 0.96) + 'px';
+    }
+  }
+  window.addEventListener('resize', () => {
+    if (resizeFitTimer) clearTimeout(resizeFitTimer);
+    resizeFitTimer = setTimeout(fitTimerFont, 100);
+  });
+
   function showAlert(type, expiresAt) {
     if (alertDismissTimer) { clearTimeout(alertDismissTimer); alertDismissTimer = null; }
     const content = ALERT_CONTENT[type] || {};
@@ -440,10 +454,11 @@ function bindStage() {
 
     if (state.clockMode) {
       if (!clockInterval) {
-        clockInterval = setInterval(() => { timer.textContent = formatWallClock(); }, 1000);
+        clockInterval = setInterval(() => { timer.textContent = formatWallClock(); fitTimerFont(); }, 1000);
       }
       timer.textContent = formatWallClock();
       timer.dataset.hidden = "false";
+      fitTimerFont();
     } else {
       if (clockInterval) {
         clearInterval(clockInterval);
@@ -451,6 +466,7 @@ function bindStage() {
       }
       timer.textContent = formatClock(displayMs(state));
       timer.dataset.hidden = String(!state.timerVisible);
+      fitTimerFont();
     }
 
     if (state.activeAlert !== prevAlertType) {
