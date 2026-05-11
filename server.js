@@ -294,8 +294,8 @@ function applyPatch(body) {
     const warningThresholdSeconds = Number.isFinite(body.queueWarningThresholdSeconds)
       ? Math.max(0, Math.floor(body.queueWarningThresholdSeconds))
       : 120;
-    if (!sessionLabel || !totalSeconds) {
-      throw new Error("Queued session label and duration are required");
+    if (!totalSeconds) {
+      throw new Error("Duration is required");
     }
     next.queuedSpeakers.push({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -303,6 +303,24 @@ function applyPatch(body) {
       totalSeconds,
       warningThresholdSeconds
     });
+  }
+  if (body.action === "loadNow") {
+    const sessionLabel = typeof body.queueSpeakerName === "string" ? body.queueSpeakerName.trim() : "";
+    const totalSeconds = Number.isFinite(body.queueSpeakerSeconds) ? Math.max(1, Math.floor(body.queueSpeakerSeconds)) : 0;
+    const warningThresholdSeconds = Number.isFinite(body.queueWarningThresholdSeconds)
+      ? Math.max(0, Math.floor(body.queueWarningThresholdSeconds))
+      : 120;
+    if (!totalSeconds) throw new Error("Duration is required");
+    next.sessionLabel = sessionLabel;
+    next.timerMode = "countdown";
+    next.totalSeconds = totalSeconds;
+    next.remainingMs = totalSeconds * 1000;
+    next.warningThresholdSeconds = warningThresholdSeconds;
+    next.dangerThresholdSeconds = next.dangerThresholdSeconds || 0;
+    next.running = false;
+    next.finishedAt = null;
+    next.timerVisible = true;
+    next.clockMode = false;
   }
   if (body.action === "removeQueuedSpeaker") {
     next.queuedSpeakers = next.queuedSpeakers.filter((speaker) => speaker.id !== body.queueSpeakerId);

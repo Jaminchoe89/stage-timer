@@ -148,7 +148,7 @@
                 <form class="form-grid" data-queue-form>
                   <label for="queueSpeakerName">
                     Session Label
-                    <input id="queueSpeakerName" name="queueSpeakerName" type="text" placeholder="Add next session label" required>
+                    <input id="queueSpeakerName" name="queueSpeakerName" type="text" placeholder="Optional">
                   </label>
                   <label for="queueDurationMinutes">
                     Preset Minutes
@@ -158,7 +158,10 @@
                     Warning Threshold (seconds)
                     <input id="queueWarningThreshold" name="queueWarningThreshold" type="number" min="0" value="120">
                   </label>
-                  <button class="primary" type="submit">Add To Queue</button>
+                  <div class="button-row">
+                    <button class="secondary" type="button" data-queue-load-now>Load Now</button>
+                    <button class="primary" type="submit">Add To Queue</button>
+                  </div>
                 </form>
                 <div class="queue-list" data-queue-list>
                   <div class="queue-empty">No speakers queued yet.</div>

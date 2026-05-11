@@ -246,7 +246,23 @@ function refreshLiveMessageButton(state) {
       queueWarningThresholdInput.value = "120";
       queueSpeakerNameInput.focus();
     } catch (err) {
-      alert("Could not add session — make sure the session label is filled in.");
+      alert("Could not add session — make sure duration is set.");
+    }
+  });
+
+  document.querySelector("[data-queue-load-now]").addEventListener("click", async () => {
+    try {
+      await postState({
+        action: "loadNow",
+        queueSpeakerName: queueSpeakerNameInput.value,
+        queueSpeakerSeconds: Number(queueDurationInput.value) * 60,
+        queueWarningThresholdSeconds: Number(queueWarningThresholdInput.value)
+      });
+      queueSpeakerNameInput.value = "";
+      queueDurationInput.value = "15";
+      queueWarningThresholdInput.value = "120";
+    } catch (err) {
+      alert("Could not load session — make sure duration is set.");
     }
   });
 
