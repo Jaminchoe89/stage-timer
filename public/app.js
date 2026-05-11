@@ -108,6 +108,7 @@ function bindDashboard() {
   const messageValue = document.querySelector("[data-message-value]");
   const blinkEnabledInput = document.querySelector("#blinkEnabled");
   const showSessionToggleBtn = document.querySelector("[data-show-session-toggle]");
+  const showTimeBtn = document.querySelector("[data-show-time]");
   const queueSpeakerNameInput = document.querySelector("#queueSpeakerName");
   const queueDurationInput = document.querySelector("#queueDurationMinutes");
   const queueWarningThresholdInput = document.querySelector("#queueWarningThreshold");
@@ -171,7 +172,6 @@ function refreshLiveMessageButton(state) {
       if (alertWrapupBtn) alertWrapupBtn.dataset.active = String(state.activeAlert === "wrapup");
       if (blinkEnabledInput) blinkEnabledInput.checked = !!state.blinkEnabled;
       if (showSessionToggleBtn) showSessionToggleBtn.dataset.active = String(!!state.showSessionLabel);
-      const showTimeBtn = document.querySelector("[data-show-time]");
       if (showTimeBtn) showTimeBtn.textContent = state.clockMode ? "Hide Clock" : "Show Clock";
       if (!liveMessageDraftDirty && document.activeElement !== liveMessageInput) {
         liveMessageInput.value = state.customMessage;
@@ -218,7 +218,11 @@ function refreshLiveMessageButton(state) {
   document.querySelector("[data-subtract-minute]").addEventListener("click", () => sendAction("subtractMinute"));
   document.querySelector("[data-add-five-minutes]").addEventListener("click", () => sendAction("addFiveMinutes"));
   document.querySelector("[data-subtract-five-minutes]").addEventListener("click", () => sendAction("subtractFiveMinutes"));
-  document.querySelector("[data-show-time]").addEventListener("click", () => sendAction("showTime"));
+  showTimeBtn.addEventListener("click", () => {
+    const next = showTimeBtn.textContent === "Show Clock";
+    showTimeBtn.textContent = next ? "Hide Clock" : "Show Clock";
+    sendAction("showTime");
+  });
 
 
   if (blinkEnabledInput) {
