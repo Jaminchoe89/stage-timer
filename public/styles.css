@@ -717,8 +717,10 @@ body.stage-body {
   position: absolute;
   inset: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 1.2vh;
   background: var(--bg, #06090f);
   font-family: ui-monospace, 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
   font-size: clamp(9rem, 25vw, 22rem);
@@ -732,6 +734,16 @@ body.stage-body {
   transition: opacity 400ms ease;
   z-index: 5;
   user-select: none;
+}
+
+.stage-clock-label {
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: clamp(0.9rem, 1.6vw, 1.8rem);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.35);
+  line-height: 1;
 }
 .stage-clock-overlay[data-active="true"] {
   opacity: 1;

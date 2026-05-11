@@ -392,6 +392,7 @@ function bindStage() {
   const shell = document.querySelector("[data-stage-shell]");
   const timer = document.querySelector("[data-stage-timer]");
   const clockOverlay = document.querySelector("[data-stage-clock]");
+  const clockTime = document.querySelector("[data-stage-clock-time]");
   const session = document.querySelector("[data-stage-session]");
   const message = document.querySelector("[data-stage-message]");
   const alertOverlay = document.querySelector("[data-stage-alert-overlay]");
@@ -501,9 +502,9 @@ function bindStage() {
     if (state.clockMode) {
       clockOverlay.dataset.active = "true";
       if (!clockInterval) {
-        clockInterval = setInterval(() => { clockOverlay.textContent = formatWallClock(); }, 1000);
+        clockInterval = setInterval(() => { clockTime.textContent = formatWallClock(); }, 1000);
       }
-      clockOverlay.textContent = formatWallClock();
+      clockTime.textContent = formatWallClock();
     } else {
       clockOverlay.dataset.active = "false";
       if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
