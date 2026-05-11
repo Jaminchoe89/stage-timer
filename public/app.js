@@ -171,6 +171,8 @@ function refreshLiveMessageButton(state) {
       if (alertWrapupBtn) alertWrapupBtn.dataset.active = String(state.activeAlert === "wrapup");
       if (blinkEnabledInput) blinkEnabledInput.checked = !!state.blinkEnabled;
       if (showSessionToggleBtn) showSessionToggleBtn.dataset.active = String(!!state.showSessionLabel);
+      const showTimeBtn = document.querySelector("[data-show-time]");
+      if (showTimeBtn) showTimeBtn.textContent = state.clockMode ? "Hide Clock" : "Show Clock";
       if (!liveMessageDraftDirty && document.activeElement !== liveMessageInput) {
         liveMessageInput.value = state.customMessage;
       }
@@ -385,6 +387,7 @@ function refreshLiveMessageButton(state) {
 function bindStage() {
   const shell = document.querySelector("[data-stage-shell]");
   const timer = document.querySelector("[data-stage-timer]");
+  const clockOverlay = document.querySelector("[data-stage-clock]");
   const session = document.querySelector("[data-stage-session]");
   const message = document.querySelector("[data-stage-message]");
   const alertOverlay = document.querySelector("[data-stage-alert-overlay]");
@@ -427,6 +430,7 @@ function bindStage() {
       }
     }
     timer.style.fontSize = lo + 'px';
+    clockOverlay.style.fontSize = lo + 'px';
     timerFontFitted = true;
   }
 
@@ -487,20 +491,20 @@ function bindStage() {
     message.textContent = state.customMessage;
     message.dataset.visible = String(state.messageVisible && !!state.customMessage);
 
+    timer.textContent = formatClock(displayMs(state));
+    timer.dataset.hidden = String(!state.timerVisible);
+
     if (state.clockMode) {
+      clockOverlay.dataset.active = "true";
       if (!clockInterval) {
-        clockInterval = setInterval(() => { timer.textContent = formatWallClock(); }, 1000);
+        clockInterval = setInterval(() => { clockOverlay.textContent = formatWallClock(); }, 1000);
       }
-      timer.textContent = formatWallClock();
-      timer.dataset.hidden = "false";
+      clockOverlay.textContent = formatWallClock();
     } else {
-      if (clockInterval) {
-        clearInterval(clockInterval);
-        clockInterval = null;
-      }
-      timer.textContent = formatClock(displayMs(state));
-      timer.dataset.hidden = String(!state.timerVisible);
+      clockOverlay.dataset.active = "false";
+      if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
     }
+
     if (!timerFontFitted) fitTimerFont();
 
     if (state.activeAlert !== prevAlertType) {
@@ -513,7 +517,7 @@ function bindStage() {
     }
   });
 
-  window.addEventListener("beforeunload", () => { sub.close(); if (clockInterval) clearInterval(clockInterval); });
+  window.addEventListener("beforeunload", () => { sub.close(); if (clockInterval) clearInterval(clockInterval); resizeFitTimer && clearTimeout(resizeFitTimer); });
 }
 
 if (document.body.matches(".dashboard-body")) {

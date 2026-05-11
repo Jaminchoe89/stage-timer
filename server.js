@@ -231,9 +231,7 @@ function applyPatch(body) {
     next.clockMode = false;
   }
   if (body.action === "showTime") {
-    next.clockMode = true;
-    next.timerVisible = true;
-    next.running = false;
+    next.clockMode = !next.clockMode;
   }
   if (body.action === "addMinute") {
     next.timerMode = "countdown";
@@ -241,6 +239,7 @@ function applyPatch(body) {
     next.totalSeconds = Math.max(next.totalSeconds, Math.ceil(next.remainingMs / 1000));
     next.finishedAt = null;
     next.timerVisible = true;
+    next.clockMode = false;
   }
   if (body.action === "subtractMinute") {
     next.timerMode = "countdown";
@@ -251,6 +250,7 @@ function applyPatch(body) {
       next.finishedAt = Date.now();
     }
     next.timerVisible = true;
+    next.clockMode = false;
   }
   if (body.action === "addFiveMinutes") {
     next.timerMode = "countdown";
@@ -258,6 +258,7 @@ function applyPatch(body) {
     next.totalSeconds = Math.max(next.totalSeconds, Math.ceil(next.remainingMs / 1000));
     next.finishedAt = null;
     next.timerVisible = true;
+    next.clockMode = false;
   }
   if (body.action === "subtractFiveMinutes") {
     next.timerMode = "countdown";
@@ -268,6 +269,7 @@ function applyPatch(body) {
       next.finishedAt = Date.now();
     }
     next.timerVisible = true;
+    next.clockMode = false;
   }
   if (body.action === "startCountup") {
     next.timerMode = "countup";
