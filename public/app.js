@@ -393,6 +393,7 @@ function bindStage() {
   const timer = document.querySelector("[data-stage-timer]");
   const clockOverlay = document.querySelector("[data-stage-clock]");
   const clockTime = document.querySelector("[data-stage-clock-time]");
+  clockTime.style.color = '#7dd3fc';
   const session = document.querySelector("[data-stage-session]");
   const message = document.querySelector("[data-stage-message]");
   const alertOverlay = document.querySelector("[data-stage-alert-overlay]");
