@@ -392,20 +392,31 @@ function bindStage() {
     .catch(() => {});
 
   let resizeFitTimer = null;
+  let timerFontFitted = false;
+
   function fitTimerFont() {
-    timer.style.fontSize = '';
-    const available = timer.parentElement.clientWidth;
+    // Binary-search for the largest px font-size whose rendered text width
+    // fits within 96% of the container — works regardless of font metrics.
+    const targetWidth = timer.parentElement.clientWidth * 0.96;
     const range = document.createRange();
     range.selectNodeContents(timer);
-    const textWidth = range.getBoundingClientRect().width;
-    if (textWidth > available * 0.97) {
-      const px = parseFloat(getComputedStyle(timer).fontSize);
-      timer.style.fontSize = Math.floor(px * available * 0.96 / textWidth) + 'px';
+    let lo = 48, hi = 480;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      timer.style.fontSize = mid + 'px';
+      if (range.getBoundingClientRect().width <= targetWidth) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
     }
+    timer.style.fontSize = lo + 'px';
+    timerFontFitted = true;
   }
+
   window.addEventListener('resize', () => {
     if (resizeFitTimer) clearTimeout(resizeFitTimer);
-    resizeFitTimer = setTimeout(fitTimerFont, 100);
+    resizeFitTimer = setTimeout(fitTimerFont, 150);
   });
 
   function showAlert(type, expiresAt) {
@@ -462,11 +473,10 @@ function bindStage() {
 
     if (state.clockMode) {
       if (!clockInterval) {
-        clockInterval = setInterval(() => { timer.textContent = formatWallClock(); fitTimerFont(); }, 1000);
+        clockInterval = setInterval(() => { timer.textContent = formatWallClock(); }, 1000);
       }
       timer.textContent = formatWallClock();
       timer.dataset.hidden = "false";
-      fitTimerFont();
     } else {
       if (clockInterval) {
         clearInterval(clockInterval);
@@ -474,8 +484,8 @@ function bindStage() {
       }
       timer.textContent = formatClock(displayMs(state));
       timer.dataset.hidden = String(!state.timerVisible);
-      fitTimerFont();
     }
+    if (!timerFontFitted) fitTimerFont();
 
     if (state.activeAlert !== prevAlertType) {
       if (state.activeAlert) {
