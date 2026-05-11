@@ -395,9 +395,12 @@ function bindStage() {
   function fitTimerFont() {
     timer.style.fontSize = '';
     const available = timer.parentElement.clientWidth;
-    if (timer.scrollWidth > available * 0.97) {
+    const range = document.createRange();
+    range.selectNodeContents(timer);
+    const textWidth = range.getBoundingClientRect().width;
+    if (textWidth > available * 0.97) {
       const px = parseFloat(getComputedStyle(timer).fontSize);
-      timer.style.fontSize = Math.floor(px * available / timer.scrollWidth * 0.96) + 'px';
+      timer.style.fontSize = Math.floor(px * available * 0.96 / textWidth) + 'px';
     }
   }
   window.addEventListener('resize', () => {
@@ -431,14 +434,19 @@ function bindStage() {
     if (alertDismissTimer) { clearTimeout(alertDismissTimer); alertDismissTimer = null; }
     if (alertAnimating) return;
     alertAnimating = true;
-    if (motionAnimate) {
-      await motionAnimate(alertCard,
-        { opacity: [1, 0], scale: [1, 0.82], y: ["0px", "30px"] },
-        { duration: 0.35, easing: [0.4, 0, 1, 1] }
-      ).finished;
+    try {
+      if (motionAnimate) {
+        await motionAnimate(alertCard,
+          { opacity: [1, 0], scale: [1, 0.82], y: ["0px", "30px"] },
+          { duration: 0.35, easing: [0.4, 0, 1, 1] }
+        ).finished;
+      }
+    } catch (_) {
+      // animation interrupted — still close the overlay
+    } finally {
+      alertOverlay.dataset.active = "false";
+      alertAnimating = false;
     }
-    alertOverlay.dataset.active = "false";
-    alertAnimating = false;
   }
 
   const sub = subscribeToState((state) => {
