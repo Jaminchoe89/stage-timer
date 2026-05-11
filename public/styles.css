@@ -863,7 +863,7 @@ body.stage-body {
   transition: opacity 300ms ease;
 }
 
-.stage-message[data-visible="false"] { opacity: 0; }
+.stage-message[data-visible="false"] { opacity: 0; min-height: 0; }
 
 .stage-timer[data-hidden="true"] {
   opacity: 0;
