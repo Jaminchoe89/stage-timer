@@ -793,6 +793,8 @@ body.stage-body {
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #ffffff;
+  max-width: 100%;
+  overflow: hidden;
   text-shadow: 0 0 80px rgba(255, 255, 255, 0.06);
   transition:
     color       500ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -1211,7 +1213,8 @@ button.alert-wrapup[data-active="true"] {
 /* ─── Stage Portrait Orientation ────────────────────────────────────────────── */
 @media (orientation: portrait) {
   .stage-timer {
-    font-size: clamp(8rem, 38vw, 22rem);
+    /* 30vw keeps "MM:SS" within the 5vw-padded viewport on all phone sizes */
+    font-size: clamp(7rem, 30vw, 22rem);
   }
 
   .stage-session {
