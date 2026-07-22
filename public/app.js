@@ -1,8 +1,48 @@
-function formatWallClock() {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, "0");
-  const m = String(now.getMinutes()).padStart(2, "0");
-  return `${h}:${m}`;
+/* ── Formatting ──────────────────────────────────────────────────────────── */
+
+// Intl formatters are expensive to build, and the render loop runs 10x a second.
+let clockFormatterKey = null;
+let clockFormatter = null;
+
+function wallClockFormatter(state) {
+  const timeZone = state && state.timeZone ? state.timeZone : null;
+  const twelveHour = Boolean(state && state.clockFormat === "12h");
+  const key = `${timeZone}|${twelveHour}`;
+
+  if (key !== clockFormatterKey) {
+    const locale = twelveHour ? "en-US" : "en-GB";
+    const options = { hour: "2-digit", minute: "2-digit", hour12: twelveHour };
+    if (timeZone) options.timeZone = timeZone;
+    try {
+      clockFormatter = new Intl.DateTimeFormat(locale, options);
+    } catch (_) {
+      // Unknown zone on this device — fall back to its own local time.
+      delete options.timeZone;
+      clockFormatter = new Intl.DateTimeFormat(locale, options);
+    }
+    clockFormatterKey = key;
+  }
+
+  return clockFormatter;
+}
+
+/**
+ * The wall clock is rendered in the timezone held in shared state, not the
+ * display device's OS timezone — venue screens are routinely set to the wrong
+ * country and we cannot audit every one of them.
+ */
+function formatWallClock(state) {
+  // Newer ICU emits a narrow no-break space before AM/PM; normalise it so the
+  // stage font renders a predictable gap at display sizes.
+  return wallClockFormatter(state).format(new Date()).replace(/\u202F/g, " ");
+}
+
+function detectedTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (_) {
+    return "";
+  }
 }
 
 function formatClock(remainingMs) {
@@ -55,48 +95,201 @@ function displayMs(state) {
   return state.timerMode === "countup" ? state.countupMs : state.remainingMs;
 }
 
-async function postState(body) {
+/* ── Control API ─────────────────────────────────────────────────────────── */
+
+const PASSCODE_KEY = "stageTimer.passcode";
+
+function storedPasscode() {
+  try {
+    return window.localStorage.getItem(PASSCODE_KEY) || "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function rememberPasscode(value) {
+  try {
+    window.localStorage.setItem(PASSCODE_KEY, value);
+  } catch (_) {
+    /* private mode — the passcode just won't persist */
+  }
+}
+
+async function postState(body, allowPrompt = true) {
+  const headers = { "Content-Type": "application/json" };
+  const passcode = storedPasscode();
+  if (passcode) headers["x-control-passcode"] = passcode;
+
   const response = await fetch("/api/state", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
+    headers,
     body: JSON.stringify(body)
   });
 
+  if (response.status === 401 && allowPrompt) {
+    const entered = window.prompt("Control passcode for this stage timer:");
+    if (entered && entered.trim()) {
+      rememberPasscode(entered.trim());
+      return postState(body, false);
+    }
+    throw new Error("Passcode required");
+  }
+
   if (!response.ok) {
-    throw new Error("Failed to update timer state");
+    let message = `Request failed (${response.status})`;
+    try {
+      const payload = await response.json();
+      if (payload && payload.error) message = payload.error;
+    } catch (_) {
+      /* keep the generic message */
+    }
+    throw new Error(message);
   }
 
   return response.json();
 }
 
-function subscribeToState(handleState) {
-  let snapshot = null;
+/* ── Live state client ───────────────────────────────────────────────────── */
 
-  function publish(state) {
-    snapshot = state;
-    handleState(state);
+// No message and no heartbeat for this long means the stream is dead even if
+// the browser has not told us so yet.
+const STALE_AFTER_MS = 25000;
+const TICK_MS = 100;
+
+/**
+ * Holds the last server snapshot and advances it locally against the browser's
+ * monotonic clock. The display therefore keeps counting through a network drop
+ * instead of freezing on the last packet, and server messages only correct drift.
+ */
+function createTimerClient({ onState, onTick }) {
+  let snapshot = null;
+  let anchor = 0;
+  let lastMessageAt = performance.now();
+  let connected = false;
+  let source = null;
+  let closed = false;
+
+  function live() {
+    if (!snapshot) return null;
+    const elapsed = snapshot.running ? Math.max(0, performance.now() - anchor) : 0;
+    const isCountup = snapshot.timerMode === "countup";
+    const remainingMs = isCountup ? snapshot.remainingMs : Math.max(0, snapshot.remainingMs - elapsed);
+    const countupMs = isCountup ? snapshot.countupMs + elapsed : snapshot.countupMs;
+
+    return {
+      ...snapshot,
+      remainingMs,
+      countupMs,
+      running: snapshot.running && !(!isCountup && remainingMs === 0)
+    };
+  }
+
+  function status() {
+    return {
+      connected,
+      stale: performance.now() - lastMessageAt > STALE_AFTER_MS,
+      hasState: Boolean(snapshot)
+    };
+  }
+
+  function apply(next) {
+    snapshot = next;
+    anchor = performance.now();
+    lastMessageAt = anchor;
+    connected = true;
+    if (onState) onState(live(), status());
+    if (onTick) onTick(live(), status());
+  }
+
+  function connect() {
+    if (closed) return;
+    source = new EventSource("/events");
+
+    source.onopen = () => {
+      connected = true;
+      lastMessageAt = performance.now();
+    };
+    source.onmessage = (event) => {
+      try {
+        apply(JSON.parse(event.data));
+      } catch (err) {
+        console.error("Bad state payload:", err);
+      }
+    };
+    source.addEventListener("ping", () => {
+      lastMessageAt = performance.now();
+      connected = true;
+    });
+    source.onerror = () => {
+      connected = false;
+    };
   }
 
   fetch("/api/state")
     .then((response) => response.json())
-    .then(publish)
-    .catch((error) => console.error(error));
+    .then((state) => {
+      if (!snapshot) apply(state);
+    })
+    .catch(() => {
+      /* the event stream is the real source — this is only for a fast first paint */
+    });
 
-  const source = new EventSource("/events");
-  source.onmessage = (event) => {
-    publish(JSON.parse(event.data));
-  };
+  connect();
+
+  // EventSource reconnects on its own, but once it lands in CLOSED it never
+  // retries. Venue wifi produces exactly that often enough to matter.
+  const watchdog = setInterval(() => {
+    if (closed) return;
+    if (!source || source.readyState === 2) {
+      connected = false;
+      try {
+        if (source) source.close();
+      } catch (_) {
+        /* already gone */
+      }
+      connect();
+    }
+  }, 3000);
+
+  const ticker = setInterval(() => {
+    if (onTick) onTick(live(), status());
+  }, TICK_MS);
 
   return {
+    live,
+    status,
     close() {
-      source.close();
-    },
-    getSnapshot() {
-      return snapshot;
+      closed = true;
+      clearInterval(ticker);
+      clearInterval(watchdog);
+      try {
+        if (source) source.close();
+      } catch (_) {
+        /* already gone */
+      }
     }
   };
+}
+
+/* ── Dashboard ───────────────────────────────────────────────────────────── */
+
+const TIMEZONE_SHORTLIST = [
+  "Asia/Singapore", "Asia/Bangkok", "Asia/Jakarta", "Asia/Kuala_Lumpur", "Asia/Manila",
+  "Asia/Ho_Chi_Minh", "Asia/Hong_Kong", "Asia/Shanghai", "Asia/Tokyo", "Asia/Seoul",
+  "Asia/Taipei", "Asia/Kolkata", "Asia/Dubai", "Australia/Sydney", "Australia/Perth",
+  "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Amsterdam", "Europe/Madrid",
+  "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "UTC"
+];
+
+function allTimeZones() {
+  try {
+    if (typeof Intl.supportedValuesOf === "function") {
+      return Intl.supportedValuesOf("timeZone");
+    }
+  } catch (_) {
+    /* fall through to the shortlist */
+  }
+  return TIMEZONE_SHORTLIST;
 }
 
 function bindDashboard() {
@@ -121,12 +314,58 @@ function bindDashboard() {
   const liveMessageInput = document.querySelector("#liveMessage");
   const liveMessageButton = document.querySelector("[data-send-message]");
   const countupStatus = document.querySelector("[data-countup-status]");
+  const connectionBanner = document.querySelector("[data-connection-banner]");
+  const toast = document.querySelector("[data-toast]");
+  const timeZoneSelect = document.querySelector("#timeZoneSelect");
+  const clockFormatSelect = document.querySelector("#clockFormatSelect");
+  const clockPreview = document.querySelector("[data-clock-preview]");
+  const detectedZoneLabel = document.querySelector("[data-detected-zone]");
+
   let latestState = null;
   let liveMessageDraftDirty = false;
   let queueCollapsed = false;
-  let dashClockInterval = null;
+  let queueSignature = null;
+  let timeZoneAutoSent = false;
+  let toastTimer = null;
 
-function refreshLiveMessageButton(state) {
+  const detected = detectedTimeZone();
+  if (detectedZoneLabel) detectedZoneLabel.textContent = detected || "unknown";
+
+  if (timeZoneSelect) {
+    const zones = allTimeZones();
+    const options = ['<option value="">Use each display’s own time</option>'];
+    for (const zone of zones) {
+      const label = zone === detected ? `${zone} (this device)` : zone;
+      options.push(`<option value="${escapeHtml(zone)}">${escapeHtml(label)}</option>`);
+    }
+    timeZoneSelect.innerHTML = options.join("");
+  }
+
+  function showToast(message, kind = "error") {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.dataset.kind = kind;
+    toast.dataset.visible = "true";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toast.dataset.visible = "false";
+    }, 4000);
+  }
+
+  // Every control routes through here so a failed request is always visible to
+  // the operator rather than silently doing nothing.
+  async function send(body, description) {
+    try {
+      await postState(body);
+    } catch (err) {
+      console.error(description, err);
+      showToast(`${description} failed — ${err.message}`);
+    }
+  }
+
+  const sendAction = (action, description) => send({ action }, description);
+
+  function refreshLiveMessageButton(state) {
     const currentState = state || latestState;
     const draft = liveMessageInput.value.trim();
 
@@ -138,103 +377,161 @@ function refreshLiveMessageButton(state) {
     liveMessageButton.textContent = currentState.messageVisible ? "Hide Message" : "Unhide Message";
   }
 
-  const sub = subscribeToState((state) => {
-    try {
-      latestState = state;
-      const theme = deriveTheme(state);
-      if (state.clockMode) {
-        if (!dashClockInterval) {
-          dashClockInterval = setInterval(() => { if (timerReadout) timerReadout.textContent = formatWallClock(); }, 1000);
+  function renderQueue(state) {
+    const signature = JSON.stringify(state.queuedSpeakers) + String(queueCollapsed);
+    if (signature === queueSignature) return;
+    queueSignature = signature;
+
+    queuePanelBody.hidden = queueCollapsed;
+    queueToggle.textContent = queueCollapsed ? "Expand Queue" : "Collapse Queue";
+
+    queueList.innerHTML = state.queuedSpeakers.length === 0
+      ? '<div class="queue-empty">No sessions queued yet.</div>'
+      : state.queuedSpeakers
+          .map((speaker, index) => `
+            <article class="queue-item">
+              <div>
+                <span class="queue-index">${index + 1}</span>
+                <strong>${escapeHtml(speaker.sessionLabel || speaker.speakerName || "Untitled Session")}</strong>
+                <span class="queue-duration">${escapeHtml(formatDuration(speaker.totalSeconds))}</span>
+                <span class="queue-threshold">${escapeHtml(`Warn at ${speaker.warningThresholdSeconds}s`)}</span>
+              </div>
+              <div class="queue-actions">
+                <button class="secondary" type="button" data-queue-load="${escapeHtml(speaker.id)}">Load</button>
+                <button class="secondary" type="button" data-queue-up="${escapeHtml(speaker.id)}">Up</button>
+                <button class="secondary" type="button" data-queue-down="${escapeHtml(speaker.id)}">Down</button>
+                <button class="danger" type="button" data-queue-remove="${escapeHtml(speaker.id)}">Delete</button>
+              </div>
+            </article>
+          `)
+          .join("");
+  }
+
+  const client = createTimerClient({
+    // Fires only when the server sends new state — safe place for full redraws
+    // and for anything that would fight with the operator's typing.
+    onState(state) {
+      try {
+        latestState = state;
+
+        stageValue.textContent = state.sessionLabel;
+        durationValue.textContent = state.timerMode === "countup" ? "Count Up" : formatDuration(state.totalSeconds);
+        if (warningValue) warningValue.textContent = `${state.warningThresholdSeconds}s`;
+        if (messageValue) {
+          messageValue.textContent = state.customMessage
+            ? state.messageVisible ? state.customMessage : "Hidden"
+            : "None";
+          messageValue.dataset.hiddenState = String(!!state.customMessage && !state.messageVisible);
         }
-        if (timerReadout) timerReadout.textContent = formatWallClock();
-      } else {
-        if (dashClockInterval) { clearInterval(dashClockInterval); dashClockInterval = null; }
-        if (timerReadout) timerReadout.textContent = state.timerVisible ? formatClock(displayMs(state)) : "--:--";
-      }
-      if (statusPill) statusPill.textContent = state.timerMode === "countup"
-        ? state.running ? "Count Up Live" : "Count Up Ready"
-        : state.running ? "Running live" : state.remainingMs === 0 ? "Time elapsed" : "Paused";
-      stageValue.textContent = state.sessionLabel;
-      durationValue.textContent = state.timerMode === "countup" ? "Count Up" : formatDuration(state.totalSeconds);
-      if (warningValue) warningValue.textContent = `${state.warningThresholdSeconds}s`;
-      if (messageValue) {
-        messageValue.textContent = state.customMessage
-          ? state.messageVisible ? state.customMessage : "Hidden"
-          : "None";
-        messageValue.dataset.hiddenState = String(!!state.customMessage && !state.messageVisible);
-      }
-      countupStatus.textContent = state.timerMode === "countup"
-        ? state.running ? "Active on stage" : "Ready on stage"
-        : "Inactive";
 
-      if (alertMicBtn) alertMicBtn.dataset.active = String(state.activeAlert === "mic");
-      if (alertVoiceBtn) alertVoiceBtn.dataset.active = String(state.activeAlert === "voice");
-      if (alertWrapupBtn) alertWrapupBtn.dataset.active = String(state.activeAlert === "wrapup");
-      if (blinkEnabledInput) blinkEnabledInput.checked = !!state.blinkEnabled;
-      if (showSessionToggleBtn) showSessionToggleBtn.dataset.active = String(!!state.showSessionLabel);
-      if (showTimeBtn) showTimeBtn.textContent = state.clockMode ? "Hide Clock" : "Show Clock";
-      if (!liveMessageDraftDirty && document.activeElement !== liveMessageInput) {
-        liveMessageInput.value = state.customMessage;
-      }
-      refreshLiveMessageButton(state);
-      document.body.dataset.theme = theme;
-      queuePanelBody.hidden = queueCollapsed;
-      queueToggle.textContent = queueCollapsed ? "Expand Queue" : "Collapse Queue";
+        if (alertMicBtn) alertMicBtn.dataset.active = String(state.activeAlert === "mic");
+        if (alertVoiceBtn) alertVoiceBtn.dataset.active = String(state.activeAlert === "voice");
+        if (alertWrapupBtn) alertWrapupBtn.dataset.active = String(state.activeAlert === "wrapup");
+        if (blinkEnabledInput) blinkEnabledInput.checked = !!state.blinkEnabled;
+        if (showSessionToggleBtn) showSessionToggleBtn.dataset.active = String(!!state.showSessionLabel);
+        if (showTimeBtn) showTimeBtn.textContent = state.clockMode ? "Hide Clock" : "Show Clock";
 
-      queueList.innerHTML = state.queuedSpeakers.length === 0
-        ? '<div class="queue-empty">No sessions queued yet.</div>'
-        : state.queuedSpeakers
-            .map((speaker, index) => `
-              <article class="queue-item">
-                <div>
-                  <span class="queue-index">${index + 1}</span>
-                  <strong>${escapeHtml(speaker.sessionLabel || speaker.speakerName || "Untitled Session")}</strong>
-                  <span class="queue-duration">${escapeHtml(formatDuration(speaker.totalSeconds))}</span>
-                  <span class="queue-threshold">${escapeHtml(`Warn at ${speaker.warningThresholdSeconds}s`)}</span>
-                </div>
-                <div class="queue-actions">
-                  <button class="secondary" type="button" data-queue-load="${speaker.id}">Load</button>
-                  <button class="secondary" type="button" data-queue-up="${speaker.id}">Up</button>
-                  <button class="secondary" type="button" data-queue-down="${speaker.id}">Down</button>
-                  <button class="danger" type="button" data-queue-remove="${speaker.id}">Delete</button>
-                </div>
-              </article>
-            `)
-            .join("");
-    } catch (err) {
-      console.error("Dashboard state update error:", err);
+        if (timeZoneSelect && document.activeElement !== timeZoneSelect) {
+          timeZoneSelect.value = state.timeZone || "";
+        }
+        if (clockFormatSelect && document.activeElement !== clockFormatSelect) {
+          clockFormatSelect.value = state.clockFormat || "24h";
+        }
+
+        // Nothing has ever set a timezone: adopt the operator's, which is
+        // almost always the event's, and push it to every display.
+        if (!timeZoneAutoSent && !state.timeZone && detected) {
+          timeZoneAutoSent = true;
+          send({ timeZone: detected }, "Setting time zone");
+        }
+
+        if (!liveMessageDraftDirty && document.activeElement !== liveMessageInput) {
+          liveMessageInput.value = state.customMessage;
+        }
+        refreshLiveMessageButton(state);
+        renderQueue(state);
+      } catch (err) {
+        console.error("Dashboard state update error:", err);
+      }
+    },
+
+    // Runs 10x a second off locally-advanced state.
+    onTick(state, status) {
+      if (connectionBanner) {
+        const degraded = !status.connected || status.stale;
+        connectionBanner.dataset.visible = String(degraded);
+        if (degraded) {
+          connectionBanner.textContent = status.hasState
+            ? "Lost connection to the timer server — the stage display is running on its own clock. Reconnecting…"
+            : "Connecting to the timer server…";
+        }
+      }
+
+      if (!state) return;
+
+      if (state.clockMode) {
+        if (timerReadout) timerReadout.textContent = formatWallClock(state);
+      } else if (timerReadout) {
+        timerReadout.textContent = state.timerVisible ? formatClock(displayMs(state)) : "--:--";
+      }
+
+      if (statusPill) {
+        statusPill.textContent = state.timerMode === "countup"
+          ? state.running ? "Count Up Live" : "Count Up Ready"
+          : state.running ? "Running live" : state.remainingMs === 0 ? "Time elapsed" : "Paused";
+      }
+
+      if (countupStatus) {
+        countupStatus.textContent = state.timerMode === "countup"
+          ? state.running ? "Active on stage" : "Ready on stage"
+          : "Inactive";
+      }
+
+      if (clockPreview) clockPreview.textContent = formatWallClock(state);
+
+      document.body.dataset.theme = deriveTheme(state);
     }
   });
 
-  async function sendAction(action) {
-    await postState({ action });
-  }
+  document.querySelector("[data-start]").addEventListener("click", () => sendAction("start", "Start"));
+  document.querySelector("[data-pause]").addEventListener("click", () => sendAction("pause", "Pause"));
+  document.querySelector("[data-reset]").addEventListener("click", () => sendAction("reset", "Reset"));
+  document.querySelector("[data-stop]").addEventListener("click", () => sendAction("stop", "Stop"));
+  document.querySelector("[data-add-minute]").addEventListener("click", () => sendAction("addMinute", "Add 1 min"));
+  document.querySelector("[data-subtract-minute]").addEventListener("click", () => sendAction("subtractMinute", "Subtract 1 min"));
+  document.querySelector("[data-add-five-minutes]").addEventListener("click", () => sendAction("addFiveMinutes", "Add 5 min"));
+  document.querySelector("[data-subtract-five-minutes]").addEventListener("click", () => sendAction("subtractFiveMinutes", "Subtract 5 min"));
 
-  document.querySelector("[data-start]").addEventListener("click", () => sendAction("start"));
-  document.querySelector("[data-pause]").addEventListener("click", () => sendAction("pause"));
-  document.querySelector("[data-reset]").addEventListener("click", () => sendAction("reset"));
-  document.querySelector("[data-stop]").addEventListener("click", () => sendAction("stop"));
-  document.querySelector("[data-add-minute]").addEventListener("click", () => sendAction("addMinute"));
-  document.querySelector("[data-subtract-minute]").addEventListener("click", () => sendAction("subtractMinute"));
-  document.querySelector("[data-add-five-minutes]").addEventListener("click", () => sendAction("addFiveMinutes"));
-  document.querySelector("[data-subtract-five-minutes]").addEventListener("click", () => sendAction("subtractFiveMinutes"));
+  // Driven off state rather than toggled locally, so the label can never lie
+  // about what the stage is showing.
   showTimeBtn.addEventListener("click", () => {
-    const next = showTimeBtn.textContent === "Show Clock";
-    showTimeBtn.textContent = next ? "Hide Clock" : "Show Clock";
-    sendAction("showTime");
+    const next = !(latestState && latestState.clockMode);
+    send({ action: "setClockMode", clockMode: next }, "Clock toggle");
   });
 
+  if (timeZoneSelect) {
+    timeZoneSelect.addEventListener("change", () => {
+      timeZoneAutoSent = true;
+      send({ timeZone: timeZoneSelect.value || null }, "Setting time zone");
+    });
+  }
+
+  if (clockFormatSelect) {
+    clockFormatSelect.addEventListener("change", () => {
+      send({ clockFormat: clockFormatSelect.value }, "Setting clock format");
+    });
+  }
 
   if (blinkEnabledInput) {
-    blinkEnabledInput.addEventListener("change", async () => {
-      await postState({ blinkEnabled: blinkEnabledInput.checked });
+    blinkEnabledInput.addEventListener("change", () => {
+      send({ blinkEnabled: blinkEnabledInput.checked }, "Blink setting");
     });
   }
 
   if (showSessionToggleBtn) {
-    showSessionToggleBtn.addEventListener("click", async () => {
+    showSessionToggleBtn.addEventListener("click", () => {
       const next = showSessionToggleBtn.dataset.active !== "true";
-      await postState({ showSessionLabel: next });
+      send({ showSessionLabel: next }, "Session label toggle");
     });
   }
 
@@ -252,7 +549,7 @@ function refreshLiveMessageButton(state) {
       queueWarningThresholdInput.value = "120";
       queueSpeakerNameInput.focus();
     } catch (err) {
-      alert("Could not add session — make sure duration is set.");
+      showToast(`Could not add session — ${err.message}`);
     }
   });
 
@@ -268,7 +565,7 @@ function refreshLiveMessageButton(state) {
       queueDurationInput.value = "15";
       queueWarningThresholdInput.value = "120";
     } catch (err) {
-      alert("Could not load session — make sure duration is set.");
+      showToast(`Could not load session — ${err.message}`);
     }
   });
 
@@ -278,13 +575,9 @@ function refreshLiveMessageButton(state) {
     queueToggle.textContent = queueCollapsed ? "Expand Queue" : "Collapse Queue";
   });
 
-  document.querySelector("[data-queue-clear]").addEventListener("click", async () => {
+  document.querySelector("[data-queue-clear]").addEventListener("click", () => {
     if (!confirm("Clear all queued sessions?")) return;
-    const state = sub.getSnapshot();
-    if (!state || !state.queuedSpeakers) return;
-    for (const speaker of [...state.queuedSpeakers]) {
-      await postState({ action: "removeQueuedSpeaker", queueSpeakerId: speaker.id });
-    }
+    send({ action: "clearQueue" }, "Clear queue");
   });
 
   liveMessageInput.addEventListener("input", () => {
@@ -294,85 +587,59 @@ function refreshLiveMessageButton(state) {
 
   liveMessageButton.addEventListener("click", async () => {
     const draft = liveMessageInput.value.trim();
-    const currentState = latestState || sub.getSnapshot();
+    const currentState = latestState;
 
     if (!currentState || !currentState.customMessage || draft !== currentState.customMessage) {
-      await postState({ action: "sendMessage", messageText: draft });
+      await send({ action: "sendMessage", messageText: draft }, "Send message");
     } else if (currentState.messageVisible) {
-      await postState({ action: "hideMessage" });
+      await send({ action: "hideMessage" }, "Hide message");
     } else {
-      await postState({ action: "unhideMessage" });
+      await send({ action: "unhideMessage" }, "Unhide message");
     }
     liveMessageDraftDirty = false;
   });
 
-  alertMicBtn.addEventListener("click", () => {
-    if (alertMicBtn.dataset.active === "true") {
-      alertMicBtn.dataset.active = "false";
-      sendAction("clearAlert");
-    } else {
-      alertMicBtn.dataset.active = "true";
-      alertVoiceBtn.dataset.active = "false";
-      alertWrapupBtn.dataset.active = "false";
-      sendAction("showMicAlert");
-    }
-  });
-  alertVoiceBtn.addEventListener("click", () => {
-    if (alertVoiceBtn.dataset.active === "true") {
-      alertVoiceBtn.dataset.active = "false";
-      sendAction("clearAlert");
-    } else {
-      alertVoiceBtn.dataset.active = "true";
-      alertMicBtn.dataset.active = "false";
-      alertWrapupBtn.dataset.active = "false";
-      sendAction("showVoiceAlert");
-    }
-  });
+  function bindAlertButton(button, action, description) {
+    if (!button) return;
+    button.addEventListener("click", () => {
+      const isActive = button.dataset.active === "true";
+      send({ action: isActive ? "clearAlert" : action }, description);
+    });
+  }
 
-  alertWrapupBtn.addEventListener("click", () => {
-    if (alertWrapupBtn.dataset.active === "true") {
-      alertWrapupBtn.dataset.active = "false";
-      sendAction("clearAlert");
-    } else {
-      alertWrapupBtn.dataset.active = "true";
-      alertMicBtn.dataset.active = "false";
-      alertVoiceBtn.dataset.active = "false";
-      sendAction("showWrapupAlert");
-    }
-  });
+  bindAlertButton(alertMicBtn, "showMicAlert", "Mic alert");
+  bindAlertButton(alertVoiceBtn, "showVoiceAlert", "Voice alert");
+  bindAlertButton(alertWrapupBtn, "showWrapupAlert", "Wrap-up alert");
 
   document.querySelector("[data-clear-message]").addEventListener("click", async () => {
     liveMessageInput.value = "";
-    await postState({ action: "clearMessage" });
+    await send({ action: "clearMessage" }, "Clear message");
     liveMessageDraftDirty = false;
     refreshLiveMessageButton();
   });
 
-  queueList.addEventListener("click", async (event) => {
+  queueList.addEventListener("click", (event) => {
     const target = event.target instanceof HTMLElement
       ? event.target.closest("button[data-queue-load], button[data-queue-up], button[data-queue-down], button[data-queue-remove]")
       : null;
     if (!target) return;
 
-    const loadId = target.dataset.queueLoad;
-    const upId = target.dataset.queueUp;
-    const downId = target.dataset.queueDown;
-    const removeId = target.dataset.queueRemove;
+    const { queueLoad, queueUp, queueDown, queueRemove } = target.dataset;
 
-    if (loadId) {
-      await postState({ action: "loadQueuedSpeaker", queueSpeakerId: loadId });
-    } else if (upId) {
-      await postState({ action: "moveQueuedSpeaker", queueSpeakerId: upId, direction: "up" });
-    } else if (downId) {
-      await postState({ action: "moveQueuedSpeaker", queueSpeakerId: downId, direction: "down" });
-    } else if (removeId) {
-      await postState({ action: "removeQueuedSpeaker", queueSpeakerId: removeId });
+    if (queueLoad) {
+      send({ action: "loadQueuedSpeaker", queueSpeakerId: queueLoad }, "Load session");
+    } else if (queueUp) {
+      send({ action: "moveQueuedSpeaker", queueSpeakerId: queueUp, direction: "up" }, "Move session");
+    } else if (queueDown) {
+      send({ action: "moveQueuedSpeaker", queueSpeakerId: queueDown, direction: "down" }, "Move session");
+    } else if (queueRemove) {
+      send({ action: "removeQueuedSpeaker", queueSpeakerId: queueRemove }, "Remove session");
     }
   });
 
-  document.querySelector("[data-countup-start]").addEventListener("click", () => sendAction("startCountup"));
-  document.querySelector("[data-countup-pause]").addEventListener("click", () => sendAction("pauseCountup"));
-  document.querySelector("[data-countup-reset]").addEventListener("click", () => sendAction("resetCountup"));
+  document.querySelector("[data-countup-start]").addEventListener("click", () => sendAction("startCountup", "Count up start"));
+  document.querySelector("[data-countup-pause]").addEventListener("click", () => sendAction("pauseCountup", "Count up pause"));
+  document.querySelector("[data-countup-reset]").addEventListener("click", () => sendAction("resetCountup", "Count up reset"));
 
   const previewWrapper = document.querySelector(".stage-preview-wrapper");
   const previewIframe = document.querySelector(".stage-preview-iframe");
@@ -385,7 +652,31 @@ function refreshLiveMessageButton(state) {
     scalePreview();
   }
 
-  window.addEventListener("beforeunload", () => { sub.close(); if (dashClockInterval) clearInterval(dashClockInterval); });
+  window.addEventListener("beforeunload", () => client.close());
+}
+
+/* ── Stage display ───────────────────────────────────────────────────────── */
+
+// The stage screen must not sleep mid-session.
+function keepScreenAwake() {
+  if (!("wakeLock" in navigator)) return;
+  let lock = null;
+
+  const acquire = async () => {
+    try {
+      lock = await navigator.wakeLock.request("screen");
+      lock.addEventListener("release", () => {
+        lock = null;
+      });
+    } catch (_) {
+      /* denied or unsupported — nothing else we can do */
+    }
+  };
+
+  void acquire();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !lock) void acquire();
+  });
 }
 
 function bindStage() {
@@ -393,90 +684,123 @@ function bindStage() {
   const timer = document.querySelector("[data-stage-timer]");
   const clockOverlay = document.querySelector("[data-stage-clock]");
   const clockTime = document.querySelector("[data-stage-clock-time]");
-  clockTime.style.color = '#7dd3fc';
   const session = document.querySelector("[data-stage-session]");
   const message = document.querySelector("[data-stage-message]");
   const alertOverlay = document.querySelector("[data-stage-alert-overlay]");
   const alertCard = document.querySelector("[data-stage-alert-card]");
   const alertHeadline = document.querySelector("[data-stage-alert-headline]");
   const alertSub = document.querySelector("[data-stage-alert-sub]");
-  let clockInterval = null;
+  const linkDot = document.querySelector("[data-stage-link-status]");
+
   let prevAlertType = null;
   let alertAnimating = false;
   let alertDismissTimer = null;
+  let lastTimerText = null;
+  let lastClockText = null;
+  let lastThemeClass = null;
+  let fittedFor = null;
 
   const ALERT_CONTENT = {
-    mic:    { headline: "Hold Mic Closer" },
-    voice:  { headline: "Project Your Voice" },
+    mic: { headline: "Hold Mic Closer" },
+    voice: { headline: "Project Your Voice" },
     wrapup: { headline: "Please Wrap Up" }
   };
 
-  let motionAnimate = null;
-  import("https://cdn.jsdelivr.net/npm/motion@latest/+esm")
-    .then((mod) => { motionAnimate = mod.animate; })
-    .catch(() => {});
+  // Bundled locally — the stage must render identically on a venue network
+  // with no internet at all.
+  const motionAnimate = window.Motion && typeof window.Motion.animate === "function"
+    ? window.Motion.animate
+    : null;
 
   let resizeFitTimer = null;
-  let timerFontFitted = false;
 
   function fitTimerFont() {
     // Binary-search for the largest px font-size whose rendered text width
     // fits within 96% of the container — works regardless of font metrics.
     const targetWidth = timer.parentElement.clientWidth * 0.96;
+    if (!targetWidth) return;
     const range = document.createRange();
     range.selectNodeContents(timer);
-    let lo = 48, hi = 480;
+    let lo = 48;
+    let hi = 480;
     while (hi - lo > 1) {
       const mid = (lo + hi) >> 1;
-      timer.style.fontSize = mid + 'px';
+      timer.style.fontSize = `${mid}px`;
       if (range.getBoundingClientRect().width <= targetWidth) {
         lo = mid;
       } else {
         hi = mid;
       }
     }
-    timer.style.fontSize = lo + 'px';
-    clockOverlay.style.fontSize = lo + 'px';
-    timerFontFitted = true;
+    timer.style.fontSize = `${lo}px`;
+    clockOverlay.style.fontSize = `${lo}px`;
   }
 
-  window.addEventListener('resize', () => {
+  // Refit whenever the string gets wider (a count-up passing 99:59, say),
+  // not just once on first paint.
+  function fitFor(text) {
+    const key = `${text.length}|${window.innerWidth}x${window.innerHeight}`;
+    if (key === fittedFor) return;
+    fittedFor = key;
+    fitTimerFont();
+  }
+
+  window.addEventListener("resize", () => {
     if (resizeFitTimer) clearTimeout(resizeFitTimer);
-    resizeFitTimer = setTimeout(fitTimerFont, 150);
+    resizeFitTimer = setTimeout(() => {
+      fittedFor = null;
+      if (lastTimerText !== null) fitFor(lastTimerText);
+    }, 150);
   });
 
-  function showAlert(type, expiresAt) {
-    if (alertDismissTimer) { clearTimeout(alertDismissTimer); alertDismissTimer = null; }
+  // Re-run once webfonts land, since the fit depends on real glyph metrics.
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      fittedFor = null;
+      if (lastTimerText !== null) fitFor(lastTimerText);
+    }).catch(() => {});
+  }
+
+  function showAlert(type, remainingMs) {
+    if (alertDismissTimer) {
+      clearTimeout(alertDismissTimer);
+      alertDismissTimer = null;
+    }
     const content = ALERT_CONTENT[type] || {};
     alertHeadline.textContent = content.headline || "";
     alertSub.textContent = content.sub || "";
     alertOverlay.dataset.alert = type;
     alertOverlay.dataset.active = "true";
+
     if (motionAnimate) {
       motionAnimate(alertCard,
         { opacity: [0, 1], scale: [0.6, 1], y: ["60px", "0px"] },
-        { duration: 0.6, easing: [0.16, 1, 0.3, 1] }
+        { duration: 0.6, ease: [0.16, 1, 0.3, 1] }
       );
     }
-    if (expiresAt) {
-      alertDismissTimer = setTimeout(() => {
-        alertDismissTimer = null;
-        prevAlertType = null;
-        hideAlert();
-      }, Math.max(0, expiresAt - Date.now()));
-    }
+
+    // Anchored to a duration from the server, not to a shared wall clock.
+    const ttl = Number.isFinite(remainingMs) ? Math.max(0, remainingMs) : 7000;
+    alertDismissTimer = setTimeout(() => {
+      alertDismissTimer = null;
+      prevAlertType = null;
+      void hideAlert();
+    }, ttl);
   }
 
   async function hideAlert() {
-    if (alertDismissTimer) { clearTimeout(alertDismissTimer); alertDismissTimer = null; }
+    if (alertDismissTimer) {
+      clearTimeout(alertDismissTimer);
+      alertDismissTimer = null;
+    }
     if (alertAnimating) return;
     alertAnimating = true;
     try {
       if (motionAnimate) {
         await motionAnimate(alertCard,
           { opacity: [1, 0], scale: [1, 0.82], y: ["0px", "30px"] },
-          { duration: 0.35, easing: [0.4, 0, 1, 1] }
-        ).finished;
+          { duration: 0.35, ease: [0.4, 0, 1, 1] }
+        );
       }
     } catch (_) {
       // animation interrupted — still close the overlay
@@ -486,44 +810,69 @@ function bindStage() {
     }
   }
 
-  const sub = subscribeToState((state) => {
-    const theme = deriveTheme(state);
-    shell.className = `stage-frame theme-${theme}`;
-    shell.dataset.blinkEnabled = String(state.blinkEnabled);
-    if (session) {
-      session.textContent = state.sessionLabel;
-      session.dataset.visible = String(!!state.showSessionLabel);
-    }
-    message.textContent = state.customMessage;
-    message.dataset.visible = String(state.messageVisible && !!state.customMessage);
+  const client = createTimerClient({
+    onState(state) {
+      shell.dataset.blinkEnabled = String(state.blinkEnabled);
 
-    timer.textContent = formatClock(displayMs(state));
-    timer.dataset.hidden = String(!state.timerVisible);
-
-    if (state.clockMode) {
-      clockOverlay.dataset.active = "true";
-      if (!clockInterval) {
-        clockInterval = setInterval(() => { clockTime.textContent = formatWallClock(); }, 1000);
+      if (session) {
+        session.textContent = state.sessionLabel;
+        session.dataset.visible = String(!!state.showSessionLabel);
       }
-      clockTime.textContent = formatWallClock();
-    } else {
-      clockOverlay.dataset.active = "false";
-      if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
-    }
+      message.textContent = state.customMessage;
+      message.dataset.visible = String(state.messageVisible && !!state.customMessage);
 
-    if (!timerFontFitted) fitTimerFont();
+      if (state.activeAlert !== prevAlertType) {
+        if (state.activeAlert) {
+          showAlert(state.activeAlert, state.alertRemainingMs);
+        } else {
+          void hideAlert();
+        }
+        prevAlertType = state.activeAlert;
+      }
+    },
 
-    if (state.activeAlert !== prevAlertType) {
-      if (state.activeAlert) {
-        showAlert(state.activeAlert, state.alertExpiresAt);
+    onTick(state, status) {
+      // Deliberately subtle: the speaker must never be distracted by an
+      // infrastructure warning, but the operator glancing over should see it.
+      if (linkDot) {
+        linkDot.dataset.visible = String(status.hasState && (!status.connected || status.stale));
+      }
+
+      if (!state) return;
+
+      const themeClass = `stage-frame theme-${deriveTheme(state)}`;
+      if (themeClass !== lastThemeClass) {
+        shell.className = themeClass;
+        lastThemeClass = themeClass;
+      }
+
+      const timerText = formatClock(displayMs(state));
+      if (timerText !== lastTimerText) {
+        timer.textContent = timerText;
+        lastTimerText = timerText;
+        fitFor(timerText);
+      }
+      timer.dataset.hidden = String(!state.timerVisible);
+
+      if (state.clockMode) {
+        clockOverlay.dataset.active = "true";
+        const clockText = formatWallClock(state);
+        if (clockText !== lastClockText) {
+          clockTime.textContent = clockText;
+          lastClockText = clockText;
+        }
       } else {
-        hideAlert();
+        clockOverlay.dataset.active = "false";
       }
-      prevAlertType = state.activeAlert;
     }
   });
 
-  window.addEventListener("beforeunload", () => { sub.close(); if (clockInterval) clearInterval(clockInterval); resizeFitTimer && clearTimeout(resizeFitTimer); });
+  keepScreenAwake();
+
+  window.addEventListener("beforeunload", () => {
+    client.close();
+    if (resizeFitTimer) clearTimeout(resizeFitTimer);
+  });
 }
 
 if (document.body.matches(".dashboard-body")) {

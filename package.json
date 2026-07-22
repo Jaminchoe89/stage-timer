@@ -5,5 +5,8 @@
   "description": "Web app for controlling a stage timer display and speaker dashboard.",
   "scripts": {
     "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

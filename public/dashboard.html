@@ -4,12 +4,13 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Stage Timer — Dashboard</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Fonts are self-hosted: no dependency on venue internet. -->
+    <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body class="dashboard-body">
+    <div class="connection-banner" data-connection-banner data-visible="false"></div>
+    <div class="toast" data-toast data-visible="false" data-kind="error" role="status" aria-live="polite"></div>
     <main class="dashboard-shell">
 
       <!-- ── Main Grid ── -->
@@ -17,6 +18,8 @@
 
         <!-- ────────────────────────────────── Left Column ── -->
         <div class="panel hero-timer">
+
+          <span class="status-pill" data-status-pill>Paused</span>
 
           <div class="preview-meta-row">
             <div class="stage-preview-compact">
@@ -181,6 +184,35 @@
                 <button class="primary" type="button" data-countup-start>Start</button>
                 <button class="secondary" type="button" data-countup-pause>Pause</button>
                 <button class="secondary" type="button" data-countup-reset>Reset</button>
+              </div>
+            </section>
+          </div>
+
+          <!-- Stage Clock -->
+          <div class="panel">
+            <section class="queue-panel">
+              <div class="queue-panel-header queue-panel-header-row">
+                <div>
+                  <h2>Stage Clock</h2>
+                </div>
+                <strong class="clock-preview" data-clock-preview>--:--</strong>
+              </div>
+              <div class="form-grid">
+                <label for="timeZoneSelect">
+                  Time Zone
+                  <select id="timeZoneSelect" name="timeZoneSelect"></select>
+                </label>
+                <label for="clockFormatSelect">
+                  Clock Format
+                  <select id="clockFormatSelect" name="clockFormatSelect">
+                    <option value="24h">24-hour (14:30)</option>
+                    <option value="12h">12-hour (2:30 PM)</option>
+                  </select>
+                </label>
+                <p class="field-hint">
+                  Every display shows this zone, whatever its own device clock is set to.
+                  This device detects <strong data-detected-zone>—</strong>.
+                </p>
               </div>
             </section>
           </div>
