@@ -64,7 +64,15 @@ duration is what **Reset** returns to, and what the Duration card reports.
 (project `stage-timer`, service `stage-timer`, 5 GB volume mounted at `/data`
 with `DATA_DIR=/data`, so state survives redeploys as well as crashes.)
 
-Redeploy with `railway up` from this directory.
+The service deploys from GitHub: pushing to `main` on
+[`Jaminchoe89/stage-timer`](https://github.com/Jaminchoe89/stage-timer) builds
+and releases automatically. `railway up` still works for an out-of-band deploy
+from your working copy, but prefer a push so the live build always matches a
+commit.
+
+Never push to `main` during a live session — a deploy restarts the container.
+State is on the volume so a running timer is advanced by the downtime and
+survives, but the display briefly loses its stream.
 
 This app **must** run on a persistent container, not on serverless. Its whole
 design is a single shared in-memory state pushed to displays over long-lived
