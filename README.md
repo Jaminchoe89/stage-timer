@@ -58,10 +58,30 @@ duration is what **Reset** returns to, and what the Duration card reports.
 
 `GET /healthz` returns process uptime and the connected display count.
 
-### Deploying on Railway
+## Deployment
 
-- The app is reachable by anyone with the URL. Set `CONTROL_PASSCODE` so only
-  the operator can drive the stage — the dashboard prompts once and remembers it.
-  `/stage` stays open so displays need no credentials.
-- Container disks are wiped on redeploy. Mount a Railway **Volume** and point
-  `DATA_DIR` at it if you want the queue to survive a deploy as well as a crash.
+**Live on Railway:** https://stage-timer-production-09bb.up.railway.app
+(project `stage-timer`, service `stage-timer`, 5 GB volume mounted at `/data`
+with `DATA_DIR=/data`, so state survives redeploys as well as crashes.)
+
+Redeploy with `railway up` from this directory.
+
+This app **must** run on a persistent container, not on serverless. Its whole
+design is a single shared in-memory state pushed to displays over long-lived
+SSE connections. On a serverless host each request can land on a different
+instance, so a dashboard action never reaches the stage's open stream, and cold
+starts reset the timer mid-event.
+
+> ⚠️ The old Vercel deployment (`stage-timer-pied.vercel.app`) is still live and
+> still auto-deploys from this repo, so it serves current code on an
+> architecture that cannot run it correctly. **Use the Railway URL at events.**
+
+The Railway URL is public and the control API is currently open — anyone with
+the link can drive the stage. Set `CONTROL_PASSCODE` to lock it:
+
+```bash
+railway variable set CONTROL_PASSCODE=<passcode>
+```
+
+The dashboard then prompts once and remembers it; `/stage` stays open so
+displays need no credentials.
