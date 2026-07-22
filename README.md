@@ -60,9 +60,23 @@ duration is what **Reset** returns to, and what the Duration card reports.
 
 ## Deployment
 
-**Live on Railway:** https://stage-timer-production-09bb.up.railway.app
-(project `stage-timer`, service `stage-timer`, 5 GB volume mounted at `/data`
-with `DATA_DIR=/data`, so state survives redeploys as well as crashes.)
+**Live:** https://stagetimer.gamemakers.co — use this at events.
+
+Also reachable on Railway's own URL,
+https://stage-timer-production-09bb.up.railway.app.
+
+Project `stage-timer`, service `stage-timer`, 5 GB volume mounted at `/data`
+with `DATA_DIR=/data`, so state survives redeploys as well as crashes.
+
+### Custom domain
+
+`stagetimer.gamemakers.co` is a CNAME to `pgc0hxjo.up.railway.app` in the
+Cloudflare zone for `gamemakers.co`, with a `_railway-verify.stagetimer` TXT
+record for ownership. Railway issues and renews the Let's Encrypt certificate.
+
+Keep the CNAME **DNS only (grey cloud)**. Proxying it through Cloudflare puts an
+extra hop in front of the long-lived SSE stream that the displays depend on, and
+interferes with Railway's certificate renewal.
 
 The service deploys from GitHub: pushing to `main` on
 [`Jaminchoe89/stage-timer`](https://github.com/Jaminchoe89/stage-timer) builds
