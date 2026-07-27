@@ -855,18 +855,25 @@ function bindStage() {
   let resizeFitTimer = null;
 
   function fitTimerFont() {
-    // Binary-search for the largest px font-size whose rendered text width
-    // fits within 96% of the container — works regardless of font metrics.
-    const targetWidth = timer.parentElement.clientWidth * 0.96;
-    if (!targetWidth) return;
+    // Binary-search for the largest px font-size whose rendered text fits within
+    // the centre area — 96% of its width AND 92% of its height. Crucially there
+    // is NO absolute cap: the size is bound only by the viewport, so the timer
+    // fills the same proportion of the screen at any resolution. That is what
+    // makes a 4K stage match the dashboard preview (a scaled 1920×1080 iframe)
+    // instead of shrinking to a fixed pixel size on high-res displays.
+    const parent = timer.parentElement;
+    const maxWidth = parent.clientWidth * 0.96;
+    const maxHeight = parent.clientHeight * 0.92;
+    if (!maxWidth || !maxHeight) return;
     const range = document.createRange();
     range.selectNodeContents(timer);
-    let lo = 48;
-    let hi = 480;
+    let lo = 16;
+    let hi = Math.ceil(window.innerHeight * 1.5); // generous upper bound, never a fixed pixel cap
     while (hi - lo > 1) {
       const mid = (lo + hi) >> 1;
       timer.style.fontSize = `${mid}px`;
-      if (range.getBoundingClientRect().width <= targetWidth) {
+      const rect = range.getBoundingClientRect();
+      if (rect.width <= maxWidth && rect.height <= maxHeight) {
         lo = mid;
       } else {
         hi = mid;

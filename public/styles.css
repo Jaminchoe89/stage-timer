@@ -757,10 +757,16 @@ body.stage-body {
            max(5vh, env(safe-area-inset-bottom, 0px))
            max(7vw, env(safe-area-inset-left, 0px));
   display: grid;
+  /* Lock the single column to the viewport. Without minmax(0, …) the column is
+     content-sized, so the large timer text would stretch the whole layout wider
+     than the screen and overflow. */
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .stage-frame {
   position: relative;
+  min-width: 0;
   min-height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto;
@@ -778,7 +784,9 @@ body.stage-body {
   gap: 2vh;
   background: var(--bg, #06090f);
   font-family: ui-monospace, 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
-  font-size: clamp(9rem, 25vw, 22rem);
+  /* JS sizes this precisely; the clamp is only the pre-JS fallback, so its cap
+     is viewport-relative (not a fixed rem) to avoid shrinking on 4K. */
+  font-size: clamp(9rem, 25vw, 60rem);
   line-height: 0.85;
   letter-spacing: -0.05em;
   font-weight: 800;
@@ -852,6 +860,9 @@ body.stage-body {
 /* Stage Center */
 .stage-center {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -890,7 +901,9 @@ body.stage-body {
 /* Stage Timer */
 .stage-timer {
   font-family: ui-monospace, 'SF Mono', 'Segoe UI Mono', 'Roboto Mono', monospace;
-  font-size: clamp(9rem, 25vw, 22rem);
+  /* JS sizes this precisely; the clamp is only the pre-JS fallback, so its cap
+     is viewport-relative (not a fixed rem) to avoid shrinking on 4K. */
+  font-size: clamp(9rem, 25vw, 60rem);
   line-height: 0.85;
   letter-spacing: -0.05em;
   font-weight: 800;
