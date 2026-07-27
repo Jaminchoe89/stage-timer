@@ -97,12 +97,16 @@ function displayMs(state) {
 
 /* ── Room context ────────────────────────────────────────────────────────── */
 
-// URLs look like /r/<id>/dashboard or /r/<id>/stage. The bare /dashboard and
-// /stage drive the default room "main"; for them API_BASE is empty so the
-// legacy routes keep working unchanged.
-const ROOM_MATCH = window.location.pathname.match(/^\/r\/([a-z0-9]+)(?:\/|$)/i);
-const ROOM_ID = ROOM_MATCH ? ROOM_MATCH[1].toLowerCase() : "main";
-const API_BASE = ROOM_MATCH ? `/r/${ROOM_ID}` : "";
+// A Show's URLs look like /s/<id>/dashboard or /s/<id>/stage. The older /r/<id>
+// prefix is an accepted alias so links shared before the rename keep working.
+// The bare /dashboard and /stage drive the default Show ("main"); for them
+// API_BASE is empty so those legacy routes are unchanged.
+const ROOM_MATCH = window.location.pathname.match(/^\/([rs])\/([a-z0-9]+)(?:\/|$)/i);
+const ROOM_PREFIX = ROOM_MATCH ? ROOM_MATCH[1].toLowerCase() : "s";
+const ROOM_ID = ROOM_MATCH ? ROOM_MATCH[2].toLowerCase() : "main";
+// Keep whichever prefix the page was opened with, so API calls hit the same
+// route the browser is on (both /r/ and /s/ resolve to the same Show).
+const API_BASE = ROOM_MATCH ? `/${ROOM_PREFIX}/${ROOM_ID}` : "";
 
 /* ── Control API ─────────────────────────────────────────────────────────── */
 
@@ -166,32 +170,15 @@ function postState(body) {
   return controlFetch(`${API_BASE}/api/state`, { method: "POST", body });
 }
 
-/* ── Shows & rooms API ───────────────────────────────────────────────────── */
+/* ── Shows API ───────────────────────────────────────────────────────────── */
+// A "Show" is one independent timer. The server calls it a room internally, so
+// these still hit /api/rooms.
 
-async function listShows() {
-  try {
-    const res = await fetch("/api/shows");
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data.shows) ? data.shows : [];
-  } catch (_) {
-    return [];
-  }
-}
-
-function saveShow(name) {
-  return controlFetch("/api/shows", { method: "POST", body: { name, roomId: ROOM_ID } });
-}
-
-function deleteShow(id) {
-  return controlFetch(`/api/shows/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
-function createRoom(body) {
+function createShow(body) {
   return controlFetch("/api/rooms", { method: "POST", body });
 }
 
-async function listRooms() {
+async function listShows() {
   const data = await controlFetch("/api/rooms", { method: "GET" });
   return data && Array.isArray(data.rooms) ? data.rooms : [];
 }
@@ -381,9 +368,6 @@ function bindDashboard() {
   const roomMissing = document.querySelector("[data-room-missing]");
   const stageLinks = document.querySelectorAll("a.stage-link");
   const previewIframe = document.querySelector(".stage-preview-iframe");
-  const showNameInput = document.querySelector("#showName");
-  const showList = document.querySelector("[data-show-list]");
-  const showSaveBtn = document.querySelector("[data-show-save]");
 
   let latestState = null;
   let liveMessageDraftDirty = false;
@@ -714,73 +698,6 @@ function bindDashboard() {
   document.querySelector("[data-countup-pause]").addEventListener("click", () => sendAction("pauseCountup", "Count up pause"));
   document.querySelector("[data-countup-reset]").addEventListener("click", () => sendAction("resetCountup", "Count up reset"));
 
-  /* ── Shows (agenda templates) ── */
-  if (showList) {
-    async function renderShows() {
-      const items = await listShows();
-      showList.innerHTML = items.length === 0
-        ? '<div class="queue-empty">No saved shows yet.</div>'
-        : items
-            .map((s) => `
-              <article class="show-item">
-                <div>
-                  <strong>${escapeHtml(s.name)}</strong>
-                  <span class="queue-duration">${s.sessionCount} session${s.sessionCount === 1 ? "" : "s"} · ${escapeHtml(formatDuration(s.totalSeconds))}</span>
-                </div>
-                <div class="queue-actions">
-                  <button class="primary" type="button" data-show-load="${escapeHtml(s.id)}">Load</button>
-                  <button class="danger" type="button" data-show-delete="${escapeHtml(s.id)}">Delete</button>
-                </div>
-              </article>
-            `)
-            .join("");
-    }
-
-    if (showSaveBtn) {
-      showSaveBtn.addEventListener("click", async () => {
-        const name = (showNameInput.value || "").trim();
-        if (!name) {
-          showToast("Give the show a name first", "info");
-          showNameInput.focus();
-          return;
-        }
-        try {
-          await saveShow(name);
-          showNameInput.value = "";
-          await renderShows();
-          showToast(`Saved “${name}”`, "info");
-        } catch (err) {
-          showToast(`Could not save show — ${err.message}`);
-        }
-      });
-    }
-
-    showList.addEventListener("click", async (event) => {
-      const target = event.target instanceof HTMLElement
-        ? event.target.closest("button[data-show-load], button[data-show-delete]")
-        : null;
-      if (!target) return;
-
-      const loadId = target.dataset.showLoad;
-      const deleteId = target.dataset.showDelete;
-
-      if (loadId) {
-        if (latestState && latestState.running && !confirm("Loading a show replaces the current agenda and stops the timer. Continue?")) return;
-        await send({ action: "loadShow", showId: loadId }, "Load show");
-      } else if (deleteId) {
-        if (!confirm("Delete this saved show?")) return;
-        try {
-          await deleteShow(deleteId);
-          await renderShows();
-        } catch (err) {
-          showToast(`Could not delete show — ${err.message}`);
-        }
-      }
-    });
-
-    renderShows();
-  }
-
   const previewWrapper = document.querySelector(".stage-preview-wrapper");
   if (previewWrapper && previewIframe) {
     const scalePreview = () => {
@@ -1062,7 +979,6 @@ function forgetRoom(id) {
 function bindLobby() {
   const createForm = document.querySelector("[data-create-room]");
   const roomNameInput = document.querySelector("#newRoomName");
-  const showSelect = document.querySelector("#newRoomShow");
   const roomList = document.querySelector("[data-room-list]");
   const toast = document.querySelector("[data-toast]");
   const showAllBtn = document.querySelector("[data-show-all-rooms]");
@@ -1077,9 +993,9 @@ function bindLobby() {
     toastTimer = setTimeout(() => { toast.dataset.visible = "false"; }, 4000);
   }
 
-  function roomCard(room) {
-    const name = escapeHtml(room.name || "Untitled Room");
-    const id = escapeHtml(room.id);
+  function showCard(show) {
+    const name = escapeHtml(show.name || "Untitled Show");
+    const id = escapeHtml(show.id);
     return `
       <article class="room-card">
         <div class="room-card-head">
@@ -1087,8 +1003,8 @@ function bindLobby() {
           <span class="room-id">${id}</span>
         </div>
         <div class="room-card-links">
-          <a class="primary" href="/r/${id}/dashboard">Open Controls</a>
-          <a class="secondary" href="/r/${id}/stage" target="_blank" rel="noreferrer">Stage</a>
+          <a class="primary" href="/s/${id}/dashboard">Open Controls</a>
+          <a class="secondary" href="/s/${id}/stage" target="_blank" rel="noreferrer">Stage</a>
           <button class="secondary" type="button" data-copy-stage="${id}">Copy Stage Link</button>
           <button class="danger" type="button" data-forget="${id}">Remove</button>
         </div>
@@ -1098,28 +1014,19 @@ function bindLobby() {
   function renderRecent() {
     const recent = loadRecentRooms();
     roomList.innerHTML = recent.length === 0
-      ? '<div class="queue-empty">No rooms on this device yet. Create one above.</div>'
-      : recent.map(roomCard).join("");
-  }
-
-  async function refreshShowOptions() {
-    if (!showSelect) return;
-    const items = await listShows();
-    const opts = ['<option value="">Empty room (no show)</option>'];
-    for (const s of items) opts.push(`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)} · ${s.sessionCount} session${s.sessionCount === 1 ? "" : "s"}</option>`);
-    showSelect.innerHTML = opts.join("");
+      ? '<div class="queue-empty">No Shows on this device yet. Create one above.</div>'
+      : recent.map(showCard).join("");
   }
 
   createForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const name = (roomNameInput.value || "").trim();
-    const showId = showSelect ? showSelect.value : "";
     try {
-      const room = await createRoom({ name, showId: showId || undefined });
-      rememberRoom({ id: room.id, name: room.name, createdAt: Date.now() });
-      window.location.href = `/r/${room.id}/dashboard`;
+      const show = await createShow({ name });
+      rememberRoom({ id: show.id, name: show.name, createdAt: Date.now() });
+      window.location.href = `/s/${show.id}/dashboard`;
     } catch (err) {
-      showToast(`Could not create room — ${err.message}`);
+      showToast(`Could not create Show — ${err.message}`);
     }
   });
 
@@ -1133,7 +1040,7 @@ function bindLobby() {
     const forgetId = target.dataset.forget;
 
     if (copyId) {
-      const link = `${window.location.origin}/r/${copyId}/stage`;
+      const link = `${window.location.origin}/s/${copyId}/stage`;
       try {
         await navigator.clipboard.writeText(link);
         showToast("Stage link copied", "info");
@@ -1149,20 +1056,19 @@ function bindLobby() {
   if (showAllBtn) {
     showAllBtn.addEventListener("click", async () => {
       try {
-        const serverRooms = await listRooms();
-        for (const r of serverRooms) {
-          if (r.id !== "main") rememberRoom({ id: r.id, name: r.name, createdAt: r.updatedAt || Date.now() });
+        const serverShows = await listShows();
+        for (const s of serverShows) {
+          if (s.id !== "main") rememberRoom({ id: s.id, name: s.name, createdAt: s.updatedAt || Date.now() });
         }
         renderRecent();
-        showToast(`Loaded ${serverRooms.length} room(s) from the server`, "info");
+        showToast(`Loaded ${serverShows.length} Show(s) from the server`, "info");
       } catch (err) {
-        showToast(`Could not list rooms — ${err.message}`);
+        showToast(`Could not list Shows — ${err.message}`);
       }
     });
   }
 
   renderRecent();
-  refreshShowOptions();
 }
 
 if (document.body.matches(".lobby-body")) {

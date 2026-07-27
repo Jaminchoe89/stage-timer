@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Stage Timer — Rooms</title>
+    <title>Stage Timer — Shows</title>
     <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/styles.css">
   </head>
@@ -13,24 +13,20 @@
     <main class="lobby-shell">
       <header class="lobby-header">
         <h1>Stage Timer</h1>
-        <p>Create an independent timer room, then share its links. Each room has its own clock, queue and stage display.</p>
+        <p>Create an independent Show, then share its links. Each Show is its own timer with its own clock, queue and stage display.</p>
       </header>
 
       <section class="panel">
         <div class="queue-panel-header">
-          <h2>Create a room</h2>
+          <h2>Create a Show</h2>
         </div>
         <form class="form-grid" data-create-room>
           <label for="newRoomName">
-            Room Name
+            Show Name
             <input id="newRoomName" name="newRoomName" type="text" placeholder="e.g. Main Stage — Acme Summit">
           </label>
-          <label for="newRoomShow">
-            Start From a Show
-            <select id="newRoomShow" name="newRoomShow"></select>
-          </label>
           <div class="button-row">
-            <button class="primary" type="submit">Create Room</button>
+            <button class="primary" type="submit">Create Show</button>
           </div>
         </form>
       </section>
@@ -38,15 +34,15 @@
       <section class="panel">
         <div class="queue-panel-header queue-panel-header-row">
           <div>
-            <h2>Your rooms</h2>
+            <h2>Your Shows</h2>
           </div>
           <a class="stage-link" href="/dashboard">Main Timer</a>
           <button class="secondary" type="button" data-show-all-rooms>Load From Server</button>
         </div>
         <div class="room-list" data-room-list></div>
         <p class="field-hint">
-          Rooms you create on this device are listed here. The room link is the key —
-          anyone with it can control that room, so share the <strong>Stage</strong> link with displays
+          Shows you create on this device are listed here. The Show link is the key —
+          anyone with it can control that Show, so share the <strong>Stage</strong> link with displays
           and keep the <strong>Controls</strong> link to yourself.
         </p>
       </section>

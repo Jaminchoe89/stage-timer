@@ -11,7 +11,6 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, ".data");
 
 const ROOMS_DIR = path.join(DATA_DIR, "rooms");
-const SHOWS_FILE = path.join(DATA_DIR, "shows.json");
 // Pre-rooms builds kept a single global timer here. Migrated into room "main".
 const LEGACY_STATE_FILE = path.join(DATA_DIR, "state.json");
 
@@ -74,20 +73,12 @@ const PERSIST_KEYS = [
   "warningThresholdSeconds", "dangerThresholdSeconds", "timeZone", "clockFormat"
 ];
 
-// The subset a Show template carries: the agenda and its display settings, but
-// none of the live clock (running, remaining, alerts).
-const SHOW_KEYS = [
-  "sessionLabel", "countupSessionLabel", "queuedSpeakers",
-  "warningThresholdSeconds", "dangerThresholdSeconds", "timeZone", "clockFormat"
-];
-
 /**
- * A room is one independent timer. Everything that used to be a single global
- * is now held per-room: the state, the monotonic anchor elapsed time is
- * measured against, and the set of connected SSE clients.
+ * A room (called a "Show" in the UI) is one independent timer. Everything that
+ * used to be a single global is now held per-room: the state, the monotonic
+ * anchor elapsed time is measured against, and the set of connected SSE clients.
  */
 const rooms = new Map(); // id -> { id, name, state, anchorMono, clients:Set }
-let shows = [];          // [{ id, name, createdAt, payload }]
 
 /* ── ICU / validation ────────────────────────────────────────────────────── */
 
@@ -147,10 +138,6 @@ function newRoomId() {
     }
   } while (rooms.has(id));
   return id;
-}
-
-function newShowId() {
-  return `show-${crypto.randomBytes(5).toString("hex")}`;
 }
 
 function cleanName(value, fallback) {
@@ -276,47 +263,6 @@ function totalClients() {
   return n;
 }
 
-/* ── Shows (agenda templates) ────────────────────────────────────────────── */
-
-function showSummary(show) {
-  const queue = Array.isArray(show.payload.queuedSpeakers) ? show.payload.queuedSpeakers : [];
-  return {
-    id: show.id,
-    name: show.name,
-    createdAt: show.createdAt,
-    sessionCount: queue.length,
-    totalSeconds: queue.reduce((sum, q) => sum + (Number.isFinite(q.totalSeconds) ? q.totalSeconds : 0), 0)
-  };
-}
-
-function captureShow(room, name) {
-  const snapshot = syncRoom(room);
-  const payload = {};
-  for (const key of SHOW_KEYS) payload[key] = snapshot[key];
-  payload.queuedSpeakers = normalizeQueuedSpeakers(payload.queuedSpeakers);
-  return { id: newShowId(), name: cleanName(name, "Untitled Show"), createdAt: Date.now(), payload };
-}
-
-// Loading a show populates the agenda and display settings but stops the clock
-// and returns to wall-clock mode, so it can never silently nuke a live countdown.
-function applyShowToState(state, show) {
-  const next = { ...state };
-  const p = show.payload || {};
-  for (const key of SHOW_KEYS) {
-    if (p[key] !== undefined) next[key] = p[key];
-  }
-  // Fresh ids so a show loaded twice can't collide with an existing queue item.
-  next.queuedSpeakers = normalizeQueuedSpeakers(p.queuedSpeakers).map((q) => ({ ...q, id: createId() }));
-  next.running = false;
-  next.finishedAt = null;
-  next.clockMode = true;
-  next.activeAlert = null;
-  next.alertExpiresAt = null;
-  next.customMessage = "";
-  next.messageVisible = false;
-  return next;
-}
-
 /* ── Persistence ─────────────────────────────────────────────────────────── */
 
 function roomFile(id) {
@@ -372,28 +318,6 @@ async function writeRoomFile(room) {
   const tmp = `${file}.tmp`;
   await fsp.writeFile(tmp, JSON.stringify(data));
   await fsp.rename(tmp, file);
-}
-
-let showsDirty = false;
-let showsTimer = null;
-
-function scheduleShowsPersist() {
-  showsDirty = true;
-  if (showsTimer) return;
-  showsTimer = setTimeout(async () => {
-    showsTimer = null;
-    if (!showsDirty) return;
-    showsDirty = false;
-    try {
-      await fsp.mkdir(DATA_DIR, { recursive: true });
-      const tmp = `${SHOWS_FILE}.tmp`;
-      await fsp.writeFile(tmp, JSON.stringify(shows));
-      await fsp.rename(tmp, SHOWS_FILE);
-    } catch (err) {
-      console.error("[persist] could not save shows:", err.message);
-      showsDirty = true;
-    }
-  }, 300);
 }
 
 // Rebuilds a room's live state from a saved file, advancing a running timer by
@@ -481,22 +405,7 @@ function loadAll() {
     rooms.set(DEFAULT_ROOM_ID, makeRoom(DEFAULT_ROOM_ID, "Main Timer"));
   }
 
-  // 5. Load shows.
-  try {
-    const parsed = JSON.parse(fs.readFileSync(SHOWS_FILE, "utf8"));
-    if (Array.isArray(parsed)) {
-      shows = parsed.filter((s) => s && typeof s.id === "string" && s.payload).map((s) => ({
-        id: s.id,
-        name: cleanName(s.name, "Untitled Show"),
-        createdAt: Number.isFinite(s.createdAt) ? s.createdAt : Date.now(),
-        payload: s.payload
-      }));
-    }
-  } catch (err) {
-    if (err.code !== "ENOENT") console.error("[restore] ignoring unreadable shows:", err.message);
-  }
-
-  console.log(`[restore] ${rooms.size} room(s), ${shows.length} show(s)`);
+  console.log(`[restore] ${rooms.size} room(s)`);
 }
 
 /* ── HTTP helpers ────────────────────────────────────────────────────────── */
@@ -741,11 +650,6 @@ function applyPatch(room, body) {
       next.queuedSpeakers = next.queuedSpeakers.filter((speaker) => speaker.id !== body.queueSpeakerId);
     }
   }
-  if (body.action === "loadShow") {
-    const show = shows.find((s) => s.id === body.showId);
-    if (!show) throw new Error("Show not found");
-    return applyShowToState(next, show);
-  }
   if (body.action === "sendMessage") {
     next.customMessage = typeof body.messageText === "string" ? body.messageText.trim() : "";
     next.messageVisible = next.customMessage.length > 0;
@@ -888,7 +792,7 @@ async function handleRequest(req, res) {
 
   /* — health & config — */
   if (isRead && pathname === "/healthz") {
-    sendJson(res, 200, { ok: true, rooms: rooms.size, clients: totalClients(), shows: shows.length, uptime: Math.round(process.uptime()) }, isHead);
+    sendJson(res, 200, { ok: true, rooms: rooms.size, clients: totalClients(), uptime: Math.round(process.uptime()) }, isHead);
     return;
   }
   if (isRead && pathname === "/api/config") {
@@ -914,13 +818,7 @@ async function handleRequest(req, res) {
       try {
         const body = await readBody(req);
         const id = newRoomId();
-        const room = makeRoom(id, cleanName(body.name, "Untitled Room"));
-        if (body.showId) {
-          const show = shows.find((s) => s.id === body.showId);
-          if (!show) throw new Error("Show not found");
-          room.state = applyShowToState(room.state, show);
-          if (!body.name) room.name = show.name;
-        }
+        const room = makeRoom(id, cleanName(body.name, "Untitled Show"));
         rooms.set(id, room);
         schedulePersist(id);
         sendJson(res, 201, { id, name: room.name });
@@ -958,53 +856,8 @@ async function handleRequest(req, res) {
     return;
   }
 
-  /* — shows — */
-  if (pathname === "/api/shows") {
-    if (req.method === "GET" || isHead) {
-      sendJson(res, 200, { shows: shows.map(showSummary) }, isHead);
-      return;
-    }
-    if (req.method === "POST") {
-      if (!isAuthorised(req)) {
-        sendJson(res, 401, { error: "Passcode required" });
-        return;
-      }
-      try {
-        const body = await readBody(req);
-        const room = rooms.get(body.roomId || DEFAULT_ROOM_ID);
-        if (!room) throw new Error("Room not found");
-        const show = captureShow(room, body.name);
-        shows.push(show);
-        scheduleShowsPersist();
-        sendJson(res, 201, showSummary(show));
-      } catch (error) {
-        sendJson(res, 400, { error: error.message });
-      }
-      return;
-    }
-    sendText(res, 405, "Method not allowed");
-    return;
-  }
-
-  const showDelete = pathname.match(/^\/api\/shows\/(show-[a-z0-9]+)$/i);
-  if (showDelete && req.method === "DELETE") {
-    if (!isAuthorised(req)) {
-      sendJson(res, 401, { error: "Passcode required" });
-      return;
-    }
-    const before = shows.length;
-    shows = shows.filter((s) => s.id !== showDelete[1]);
-    if (shows.length === before) {
-      sendJson(res, 404, { error: "Show not found" });
-      return;
-    }
-    scheduleShowsPersist();
-    sendJson(res, 200, { ok: true });
-    return;
-  }
-
-  /* — per-room routes: /r/<id>/... — */
-  const roomRoute = pathname.match(/^\/r\/([^/]+)(\/.*)?$/);
+  /* — per-Show routes: /s/<id>/… (and the legacy /r/<id>/… alias) — */
+  const roomRoute = pathname.match(/^\/[rs]\/([^/]+)(\/.*)?$/);
   if (roomRoute) {
     const id = roomRoute[1].toLowerCase();
     const rest = roomRoute[2] || "/";
@@ -1140,13 +993,6 @@ for (const signal of ["SIGTERM", "SIGINT"]) {
   process.on(signal, () => {
     console.log(`[${signal}] saving state before exit`);
     for (const id of rooms.keys()) dirtyRooms.add(id);
-    Promise.all([flushDirty(), (async () => {
-      if (showsDirty) {
-        try {
-          await fsp.mkdir(DATA_DIR, { recursive: true });
-          await fsp.writeFile(SHOWS_FILE, JSON.stringify(shows));
-        } catch (_) { /* best effort */ }
-      }
-    })()]).finally(() => process.exit(0));
+    flushDirty().finally(() => process.exit(0));
   });
 }
