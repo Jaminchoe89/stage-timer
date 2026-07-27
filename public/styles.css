@@ -1069,7 +1069,7 @@ button.alert-mic[data-active="true"] {
   background: rgba(240, 180, 41, 0.2);
   border-color: rgba(240, 180, 41, 0.55);
   box-shadow: 0 0 26px rgba(240, 180, 41, 0.28);
-  animation: alert-btn-pulse-mic 1.8s ease-in-out infinite;
+  animation: alert-btn-pulse-mic 2.6s ease-in-out infinite;
 }
 
 button.alert-voice {
@@ -1088,7 +1088,7 @@ button.alert-voice[data-active="true"] {
   background: rgba(34, 211, 238, 0.16);
   border-color: rgba(34, 211, 238, 0.5);
   box-shadow: 0 0 26px rgba(34, 211, 238, 0.24);
-  animation: alert-btn-pulse-voice 1.8s ease-in-out infinite;
+  animation: alert-btn-pulse-voice 2.6s ease-in-out infinite;
 }
 
 @keyframes alert-btn-pulse-mic {
@@ -1117,7 +1117,7 @@ button.alert-wrapup[data-active="true"] {
   background: rgba(244, 114, 182, 0.2);
   border-color: rgba(244, 114, 182, 0.55);
   box-shadow: 0 0 26px rgba(244, 114, 182, 0.28);
-  animation: alert-btn-pulse-wrapup 1.8s ease-in-out infinite;
+  animation: alert-btn-pulse-wrapup 2.6s ease-in-out infinite;
 }
 
 @keyframes alert-btn-pulse-wrapup {
@@ -1138,7 +1138,7 @@ button.alert-wrapup[data-active="true"] {
   -webkit-backdrop-filter: blur(20px);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 
   --alert-c: #fff;
 }
@@ -1192,7 +1192,7 @@ button.alert-wrapup[data-active="true"] {
   height: 100%;
   position: relative;
   z-index: 1;
-  animation: alert-icon-breathe 2.2s ease-in-out infinite;
+  animation: alert-icon-breathe 3.2s ease-in-out infinite;
   animation-play-state: paused;
 }
 
@@ -1206,7 +1206,7 @@ button.alert-wrapup[data-active="true"] {
   border-radius: 50%;
   border: 3px solid var(--alert-c);
   opacity: 0;
-  animation: alert-ring-expand 2.1s ease-out infinite;
+  animation: alert-ring-expand 3s ease-out infinite;
   animation-play-state: paused;
 }
 
@@ -1214,9 +1214,11 @@ button.alert-wrapup[data-active="true"] {
   animation-play-state: running;
 }
 
+/* One ping per second. Tighter than this and three overlapping rings read as a
+   strobe from the back of a room rather than a calm "look up" cue. */
 .stage-alert-ring:nth-child(1) { animation-delay: 0s; }
-.stage-alert-ring:nth-child(2) { animation-delay: 0.7s; }
-.stage-alert-ring:nth-child(3) { animation-delay: 1.4s; }
+.stage-alert-ring:nth-child(2) { animation-delay: 1s; }
+.stage-alert-ring:nth-child(3) { animation-delay: 2s; }
 
 .stage-alert-headline {
   font-size: clamp(3.5rem, 9vw, 10rem);
@@ -1379,6 +1381,11 @@ button.alert-wrapup[data-active="true"] {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+    /* Without this, every `infinite` animation above (alert rings, icon breathe,
+       overtime blink) restarts every 0.01ms and strobes at the refresh rate —
+       the opposite of reduced motion. Collapsing to a single iteration is what
+       actually stops the motion. */
+    animation-iteration-count: 1 !important;
   }
 }
 

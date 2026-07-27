@@ -844,7 +844,7 @@ function bindStage() {
     if (motionAnimate) {
       motionAnimate(alertCard,
         { opacity: [0, 1], scale: [0.6, 1], y: ["60px", "0px"] },
-        { duration: 0.6, ease: [0.16, 1, 0.3, 1] }
+        { duration: 0.85, ease: [0.16, 1, 0.3, 1] }
       );
     }
 
@@ -868,7 +868,7 @@ function bindStage() {
       if (motionAnimate) {
         await motionAnimate(alertCard,
           { opacity: [1, 0], scale: [1, 0.82], y: ["0px", "30px"] },
-          { duration: 0.35, ease: [0.4, 0, 1, 1] }
+          { duration: 0.5, ease: [0.4, 0, 1, 1] }
         );
       }
     } catch (_) {
