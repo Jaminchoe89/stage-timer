@@ -183,6 +183,11 @@ async function listShows() {
   return data && Array.isArray(data.rooms) ? data.rooms : [];
 }
 
+// Permanently deletes a Show on the server (its links stop working).
+function deleteShow(id) {
+  return controlFetch(`/api/rooms/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 /* ── Live state client ───────────────────────────────────────────────────── */
 
 // No message and no heartbeat for this long means the stream is dead even if
@@ -1023,7 +1028,7 @@ function bindLobby() {
           <a class="primary" href="/s/${id}/dashboard">Open Controls</a>
           <a class="secondary" href="/s/${id}/stage" target="_blank" rel="noreferrer">Stage</a>
           <button class="secondary" type="button" data-copy-stage="${id}">Copy Stage Link</button>
-          <button class="danger" type="button" data-forget="${id}">Remove</button>
+          <button class="danger" type="button" data-delete="${id}" data-name="${escapeHtml(show.name || "this Show")}">Delete</button>
         </div>
       </article>`;
   }
@@ -1049,12 +1054,12 @@ function bindLobby() {
 
   roomList.addEventListener("click", async (event) => {
     const target = event.target instanceof HTMLElement
-      ? event.target.closest("button[data-copy-stage], button[data-forget]")
+      ? event.target.closest("button[data-copy-stage], button[data-delete]")
       : null;
     if (!target) return;
 
     const copyId = target.dataset.copyStage;
-    const forgetId = target.dataset.forget;
+    const deleteId = target.dataset.delete;
 
     if (copyId) {
       const link = `${window.location.origin}/s/${copyId}/stage`;
@@ -1064,9 +1069,22 @@ function bindLobby() {
       } catch (_) {
         window.prompt("Copy this stage link:", link);
       }
-    } else if (forgetId) {
-      forgetRoom(forgetId);
+    } else if (deleteId) {
+      const name = target.dataset.name || "this Show";
+      if (!confirm(`Delete “${name}” permanently? Its links will stop working. This can't be undone.`)) return;
+      try {
+        await deleteShow(deleteId);
+      } catch (err) {
+        // A "not found" just means it's already gone server-side — still clear
+        // it from this device. Anything else is a real failure.
+        if (!/not found/i.test(err.message)) {
+          showToast(`Could not delete Show — ${err.message}`);
+          return;
+        }
+      }
+      forgetRoom(deleteId);
       renderRecent();
+      showToast(`Deleted “${name}”`, "info");
     }
   });
 
