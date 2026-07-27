@@ -95,6 +95,15 @@ function displayMs(state) {
   return state.timerMode === "countup" ? state.countupMs : state.remainingMs;
 }
 
+/* ── Room context ────────────────────────────────────────────────────────── */
+
+// URLs look like /r/<id>/dashboard or /r/<id>/stage. The bare /dashboard and
+// /stage drive the default room "main"; for them API_BASE is empty so the
+// legacy routes keep working unchanged.
+const ROOM_MATCH = window.location.pathname.match(/^\/r\/([a-z0-9]+)(?:\/|$)/i);
+const ROOM_ID = ROOM_MATCH ? ROOM_MATCH[1].toLowerCase() : "main";
+const API_BASE = ROOM_MATCH ? `/r/${ROOM_ID}` : "";
+
 /* ── Control API ─────────────────────────────────────────────────────────── */
 
 const PASSCODE_KEY = "stageTimer.passcode";
@@ -115,22 +124,25 @@ function rememberPasscode(value) {
   }
 }
 
-async function postState(body, allowPrompt = true) {
-  const headers = { "Content-Type": "application/json" };
+// Every mutating call goes through here: it attaches the stored passcode,
+// prompts once on a 401 and retries, and surfaces server error messages.
+async function controlFetch(url, { method = "POST", body } = {}, allowPrompt = true) {
+  const headers = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
   const passcode = storedPasscode();
   if (passcode) headers["x-control-passcode"] = passcode;
 
-  const response = await fetch("/api/state", {
-    method: "POST",
+  const response = await fetch(url, {
+    method,
     headers,
-    body: JSON.stringify(body)
+    body: body !== undefined ? JSON.stringify(body) : undefined
   });
 
   if (response.status === 401 && allowPrompt) {
-    const entered = window.prompt("Control passcode for this stage timer:");
+    const entered = window.prompt("Control passcode:");
     if (entered && entered.trim()) {
       rememberPasscode(entered.trim());
-      return postState(body, false);
+      return controlFetch(url, { method, body }, false);
     }
     throw new Error("Passcode required");
   }
@@ -146,7 +158,42 @@ async function postState(body, allowPrompt = true) {
     throw new Error(message);
   }
 
-  return response.json();
+  const text = await response.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function postState(body) {
+  return controlFetch(`${API_BASE}/api/state`, { method: "POST", body });
+}
+
+/* ── Shows & rooms API ───────────────────────────────────────────────────── */
+
+async function listShows() {
+  try {
+    const res = await fetch("/api/shows");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data.shows) ? data.shows : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveShow(name) {
+  return controlFetch("/api/shows", { method: "POST", body: { name, roomId: ROOM_ID } });
+}
+
+function deleteShow(id) {
+  return controlFetch(`/api/shows/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+function createRoom(body) {
+  return controlFetch("/api/rooms", { method: "POST", body });
+}
+
+async function listRooms() {
+  const data = await controlFetch("/api/rooms", { method: "GET" });
+  return data && Array.isArray(data.rooms) ? data.rooms : [];
 }
 
 /* ── Live state client ───────────────────────────────────────────────────── */
@@ -161,13 +208,14 @@ const TICK_MS = 100;
  * monotonic clock. The display therefore keeps counting through a network drop
  * instead of freezing on the last packet, and server messages only correct drift.
  */
-function createTimerClient({ onState, onTick }) {
+function createTimerClient({ onState, onTick, onNotFound }) {
   let snapshot = null;
   let anchor = 0;
   let lastMessageAt = performance.now();
   let connected = false;
   let source = null;
   let closed = false;
+  let notFound = false;
 
   function live() {
     if (!snapshot) return null;
@@ -202,8 +250,8 @@ function createTimerClient({ onState, onTick }) {
   }
 
   function connect() {
-    if (closed) return;
-    source = new EventSource("/events");
+    if (closed || notFound) return;
+    source = new EventSource(`${API_BASE}/events`);
 
     source.onopen = () => {
       connected = true;
@@ -225,21 +273,30 @@ function createTimerClient({ onState, onTick }) {
     };
   }
 
-  fetch("/api/state")
-    .then((response) => response.json())
+  // The initial fetch is authoritative for existence. A 404 means the room id
+  // is unknown, so we stop rather than let EventSource hammer a missing route.
+  fetch(`${API_BASE}/api/state`)
+    .then((response) => {
+      if (response.status === 404) {
+        notFound = true;
+        if (onNotFound) onNotFound();
+        return null;
+      }
+      return response.json();
+    })
     .then((state) => {
-      if (!snapshot) apply(state);
+      if (state && !snapshot) apply(state);
+      connect();
     })
     .catch(() => {
-      /* the event stream is the real source — this is only for a fast first paint */
+      // Network hiccup, not a 404 — rely on the event stream to recover.
+      connect();
     });
-
-  connect();
 
   // EventSource reconnects on its own, but once it lands in CLOSED it never
   // retries. Venue wifi produces exactly that often enough to matter.
   const watchdog = setInterval(() => {
-    if (closed) return;
+    if (closed || notFound) return;
     if (!source || source.readyState === 2) {
       connected = false;
       try {
@@ -320,6 +377,13 @@ function bindDashboard() {
   const clockFormatSelect = document.querySelector("#clockFormatSelect");
   const clockPreview = document.querySelector("[data-clock-preview]");
   const detectedZoneLabel = document.querySelector("[data-detected-zone]");
+  const roomNameEl = document.querySelector("[data-room-name]");
+  const roomMissing = document.querySelector("[data-room-missing]");
+  const stageLinks = document.querySelectorAll("a.stage-link");
+  const previewIframe = document.querySelector(".stage-preview-iframe");
+  const showNameInput = document.querySelector("#showName");
+  const showList = document.querySelector("[data-show-list]");
+  const showSaveBtn = document.querySelector("[data-show-save]");
 
   let latestState = null;
   let liveMessageDraftDirty = false;
@@ -327,6 +391,10 @@ function bindDashboard() {
   let queueSignature = null;
   let timeZoneAutoSent = false;
   let toastTimer = null;
+
+  // Point the "Open Stage" links and the live preview at this room.
+  stageLinks.forEach((a) => a.setAttribute("href", `${API_BASE}/stage`));
+  if (previewIframe && API_BASE) previewIframe.src = `${API_BASE}/stage`;
 
   const detected = detectedTimeZone();
   if (detectedZoneLabel) detectedZoneLabel.textContent = detected || "unknown";
@@ -414,6 +482,7 @@ function bindDashboard() {
       try {
         latestState = state;
 
+        if (roomNameEl && state.roomName) roomNameEl.textContent = state.roomName;
         stageValue.textContent = state.sessionLabel;
         durationValue.textContent = state.timerMode === "countup" ? "Count Up" : formatDuration(state.totalSeconds);
         if (warningValue) warningValue.textContent = `${state.warningThresholdSeconds}s`;
@@ -490,6 +559,10 @@ function bindDashboard() {
       if (clockPreview) clockPreview.textContent = formatWallClock(state);
 
       document.body.dataset.theme = deriveTheme(state);
+    },
+
+    onNotFound() {
+      if (roomMissing) roomMissing.dataset.visible = "true";
     }
   });
 
@@ -641,8 +714,74 @@ function bindDashboard() {
   document.querySelector("[data-countup-pause]").addEventListener("click", () => sendAction("pauseCountup", "Count up pause"));
   document.querySelector("[data-countup-reset]").addEventListener("click", () => sendAction("resetCountup", "Count up reset"));
 
+  /* ── Shows (agenda templates) ── */
+  if (showList) {
+    async function renderShows() {
+      const items = await listShows();
+      showList.innerHTML = items.length === 0
+        ? '<div class="queue-empty">No saved shows yet.</div>'
+        : items
+            .map((s) => `
+              <article class="show-item">
+                <div>
+                  <strong>${escapeHtml(s.name)}</strong>
+                  <span class="queue-duration">${s.sessionCount} session${s.sessionCount === 1 ? "" : "s"} · ${escapeHtml(formatDuration(s.totalSeconds))}</span>
+                </div>
+                <div class="queue-actions">
+                  <button class="primary" type="button" data-show-load="${escapeHtml(s.id)}">Load</button>
+                  <button class="danger" type="button" data-show-delete="${escapeHtml(s.id)}">Delete</button>
+                </div>
+              </article>
+            `)
+            .join("");
+    }
+
+    if (showSaveBtn) {
+      showSaveBtn.addEventListener("click", async () => {
+        const name = (showNameInput.value || "").trim();
+        if (!name) {
+          showToast("Give the show a name first", "info");
+          showNameInput.focus();
+          return;
+        }
+        try {
+          await saveShow(name);
+          showNameInput.value = "";
+          await renderShows();
+          showToast(`Saved “${name}”`, "info");
+        } catch (err) {
+          showToast(`Could not save show — ${err.message}`);
+        }
+      });
+    }
+
+    showList.addEventListener("click", async (event) => {
+      const target = event.target instanceof HTMLElement
+        ? event.target.closest("button[data-show-load], button[data-show-delete]")
+        : null;
+      if (!target) return;
+
+      const loadId = target.dataset.showLoad;
+      const deleteId = target.dataset.showDelete;
+
+      if (loadId) {
+        if (latestState && latestState.running && !confirm("Loading a show replaces the current agenda and stops the timer. Continue?")) return;
+        await send({ action: "loadShow", showId: loadId }, "Load show");
+      } else if (deleteId) {
+        if (!confirm("Delete this saved show?")) return;
+        try {
+          await deleteShow(deleteId);
+          await renderShows();
+        } catch (err) {
+          showToast(`Could not delete show — ${err.message}`);
+        }
+      }
+    });
+
+    renderShows();
+  }
+
   const previewWrapper = document.querySelector(".stage-preview-wrapper");
-  const previewIframe = document.querySelector(".stage-preview-iframe");
   if (previewWrapper && previewIframe) {
     const scalePreview = () => {
       const scale = previewWrapper.clientWidth / 1920;
@@ -691,6 +830,7 @@ function bindStage() {
   const alertHeadline = document.querySelector("[data-stage-alert-headline]");
   const alertSub = document.querySelector("[data-stage-alert-sub]");
   const linkDot = document.querySelector("[data-stage-link-status]");
+  const roomMissing = document.querySelector("[data-room-missing]");
 
   let prevAlertType = null;
   let alertAnimating = false;
@@ -864,6 +1004,10 @@ function bindStage() {
       } else {
         clockOverlay.dataset.active = "false";
       }
+    },
+
+    onNotFound() {
+      if (roomMissing) roomMissing.dataset.visible = "true";
     }
   });
 
@@ -873,6 +1017,149 @@ function bindStage() {
     client.close();
     if (resizeFitTimer) clearTimeout(resizeFitTimer);
   });
+}
+
+/* ── Lobby ───────────────────────────────────────────────────────────────── */
+
+// Rooms this browser has created or opened, so the lobby can list them without
+// the server having to hand out every room link (which would need the passcode).
+const RECENT_ROOMS_KEY = "stageTimer.recentRooms";
+
+function loadRecentRooms() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(RECENT_ROOMS_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function rememberRoom(entry) {
+  try {
+    const list = loadRecentRooms().filter((r) => r.id !== entry.id);
+    list.unshift(entry);
+    window.localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(list.slice(0, 30)));
+  } catch (_) {
+    /* private mode — recent list just won't persist */
+  }
+}
+
+function forgetRoom(id) {
+  try {
+    window.localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(loadRecentRooms().filter((r) => r.id !== id)));
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function bindLobby() {
+  const createForm = document.querySelector("[data-create-room]");
+  const roomNameInput = document.querySelector("#newRoomName");
+  const showSelect = document.querySelector("#newRoomShow");
+  const roomList = document.querySelector("[data-room-list]");
+  const toast = document.querySelector("[data-toast]");
+  const showAllBtn = document.querySelector("[data-show-all-rooms]");
+  let toastTimer = null;
+
+  function showToast(message, kind = "error") {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.dataset.kind = kind;
+    toast.dataset.visible = "true";
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.dataset.visible = "false"; }, 4000);
+  }
+
+  function roomCard(room) {
+    const name = escapeHtml(room.name || "Untitled Room");
+    const id = escapeHtml(room.id);
+    return `
+      <article class="room-card">
+        <div class="room-card-head">
+          <strong>${name}</strong>
+          <span class="room-id">${id}</span>
+        </div>
+        <div class="room-card-links">
+          <a class="primary" href="/r/${id}/dashboard">Open Controls</a>
+          <a class="secondary" href="/r/${id}/stage" target="_blank" rel="noreferrer">Stage</a>
+          <button class="secondary" type="button" data-copy-stage="${id}">Copy Stage Link</button>
+          <button class="danger" type="button" data-forget="${id}">Remove</button>
+        </div>
+      </article>`;
+  }
+
+  function renderRecent() {
+    const recent = loadRecentRooms();
+    roomList.innerHTML = recent.length === 0
+      ? '<div class="queue-empty">No rooms on this device yet. Create one above.</div>'
+      : recent.map(roomCard).join("");
+  }
+
+  async function refreshShowOptions() {
+    if (!showSelect) return;
+    const items = await listShows();
+    const opts = ['<option value="">Empty room (no show)</option>'];
+    for (const s of items) opts.push(`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)} · ${s.sessionCount} session${s.sessionCount === 1 ? "" : "s"}</option>`);
+    showSelect.innerHTML = opts.join("");
+  }
+
+  createForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = (roomNameInput.value || "").trim();
+    const showId = showSelect ? showSelect.value : "";
+    try {
+      const room = await createRoom({ name, showId: showId || undefined });
+      rememberRoom({ id: room.id, name: room.name, createdAt: Date.now() });
+      window.location.href = `/r/${room.id}/dashboard`;
+    } catch (err) {
+      showToast(`Could not create room — ${err.message}`);
+    }
+  });
+
+  roomList.addEventListener("click", async (event) => {
+    const target = event.target instanceof HTMLElement
+      ? event.target.closest("button[data-copy-stage], button[data-forget]")
+      : null;
+    if (!target) return;
+
+    const copyId = target.dataset.copyStage;
+    const forgetId = target.dataset.forget;
+
+    if (copyId) {
+      const link = `${window.location.origin}/r/${copyId}/stage`;
+      try {
+        await navigator.clipboard.writeText(link);
+        showToast("Stage link copied", "info");
+      } catch (_) {
+        window.prompt("Copy this stage link:", link);
+      }
+    } else if (forgetId) {
+      forgetRoom(forgetId);
+      renderRecent();
+    }
+  });
+
+  if (showAllBtn) {
+    showAllBtn.addEventListener("click", async () => {
+      try {
+        const serverRooms = await listRooms();
+        for (const r of serverRooms) {
+          if (r.id !== "main") rememberRoom({ id: r.id, name: r.name, createdAt: r.updatedAt || Date.now() });
+        }
+        renderRecent();
+        showToast(`Loaded ${serverRooms.length} room(s) from the server`, "info");
+      } catch (err) {
+        showToast(`Could not list rooms — ${err.message}`);
+      }
+    });
+  }
+
+  renderRecent();
+  refreshShowOptions();
+}
+
+if (document.body.matches(".lobby-body")) {
+  bindLobby();
 }
 
 if (document.body.matches(".dashboard-body")) {

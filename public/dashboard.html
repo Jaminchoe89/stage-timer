@@ -19,7 +19,14 @@
         <!-- ────────────────────────────────── Left Column ── -->
         <div class="panel hero-timer">
 
-          <span class="status-pill" data-status-pill>Paused</span>
+          <div class="room-bar">
+            <a class="room-back" href="/">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+              Rooms
+            </a>
+            <strong class="room-name" data-room-name>Main Timer</strong>
+            <span class="status-pill" data-status-pill>Paused</span>
+          </div>
 
           <div class="preview-meta-row">
             <div class="stage-preview-compact">
@@ -217,11 +224,43 @@
             </section>
           </div>
 
+          <!-- Shows (agenda templates) -->
+          <div class="panel">
+            <section class="queue-panel">
+              <div class="queue-panel-header">
+                <h2>Shows</h2>
+                <p>Save this room’s agenda as a reusable template.</p>
+              </div>
+              <div class="form-grid">
+                <label for="showName">
+                  Save Current Agenda As
+                  <input id="showName" name="showName" type="text" placeholder="e.g. Investment Summit">
+                </label>
+                <div class="button-row">
+                  <button class="primary" type="button" data-show-save>Save as Show</button>
+                </div>
+                <div class="show-list" data-show-list>
+                  <div class="queue-empty">No saved shows yet.</div>
+                </div>
+              </div>
+            </section>
+          </div>
+
         </div>
         <!-- /right column -->
 
       </section>
     </main>
+
+    <!-- Shown only when the room id in the URL doesn't exist -->
+    <div class="room-missing" data-room-missing data-visible="false">
+      <div class="room-missing-card">
+        <h1>Room not found</h1>
+        <p>This timer room doesn’t exist or has been removed.</p>
+        <a class="primary" href="/">Go to Rooms</a>
+      </div>
+    </div>
+
     <script src="/app.js"></script>
   </body>
 </html>

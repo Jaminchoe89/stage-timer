@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stage Timer — Rooms</title>
+    <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="lobby-body">
+    <div class="toast" data-toast data-visible="false" data-kind="error" role="status" aria-live="polite"></div>
+
+    <main class="lobby-shell">
+      <header class="lobby-header">
+        <h1>Stage Timer</h1>
+        <p>Create an independent timer room, then share its links. Each room has its own clock, queue and stage display.</p>
+      </header>
+
+      <section class="panel">
+        <div class="queue-panel-header">
+          <h2>Create a room</h2>
+        </div>
+        <form class="form-grid" data-create-room>
+          <label for="newRoomName">
+            Room Name
+            <input id="newRoomName" name="newRoomName" type="text" placeholder="e.g. Main Stage — Acme Summit">
+          </label>
+          <label for="newRoomShow">
+            Start From a Show
+            <select id="newRoomShow" name="newRoomShow"></select>
+          </label>
+          <div class="button-row">
+            <button class="primary" type="submit">Create Room</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="queue-panel-header queue-panel-header-row">
+          <div>
+            <h2>Your rooms</h2>
+          </div>
+          <a class="stage-link" href="/dashboard">Main Timer</a>
+          <button class="secondary" type="button" data-show-all-rooms>Load From Server</button>
+        </div>
+        <div class="room-list" data-room-list></div>
+        <p class="field-hint">
+          Rooms you create on this device are listed here. The room link is the key —
+          anyone with it can control that room, so share the <strong>Stage</strong> link with displays
+          and keep the <strong>Controls</strong> link to yourself.
+        </p>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

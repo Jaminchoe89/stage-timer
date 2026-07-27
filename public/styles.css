@@ -1439,3 +1439,202 @@ button.alert-wrapup[data-active="true"] {
   0%, 100% { opacity: 0.28; }
   50%      { opacity: 0.85; }
 }
+
+/* ─── Rooms & Shows ─────────────────────────────────────────────────────────── */
+
+/* Room bar at the top of the dashboard hero */
+.room-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.room-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  color: var(--text-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 5px 10px 5px 6px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--panel-border);
+  transition: color 140ms, border-color 140ms, background 140ms;
+}
+
+.room-back:hover { color: var(--text); border-color: var(--panel-border-hi); background: var(--panel-hi); }
+.room-back svg { width: 14px; height: 14px; }
+
+.room-name {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  margin-right: auto;
+}
+
+/* Lobby */
+body.lobby-body {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 75% 55% at 5% 0%,  rgba(240, 180, 41, 0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 55% 45% at 95% 100%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
+    var(--bg);
+}
+
+.lobby-shell {
+  width: calc(100% - 40px);
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 40px 0 60px;
+  display: grid;
+  gap: 18px;
+}
+
+.lobby-header { padding: 8px 4px 4px; }
+.lobby-header h1 {
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.lobby-header p {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  max-width: 60ch;
+}
+
+.room-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.room-card {
+  background: rgba(6, 9, 15, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.room-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.room-card-head strong { font-size: 1rem; font-weight: 700; color: var(--text); }
+
+.room-id {
+  font-family: ui-monospace, 'SF Mono', 'Roboto Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+}
+
+.room-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.room-card-links a,
+.room-card-links button {
+  text-decoration: none;
+  text-align: center;
+  font-size: 0.82rem;
+  padding: 8px 14px;
+  min-height: 0;
+  width: auto;
+}
+
+/* Show list (dashboard + reused elsewhere) */
+.show-list {
+  display: grid;
+  gap: 8px;
+}
+
+.show-item {
+  background: rgba(6, 9, 15, 0.4);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-sm);
+  padding: 11px 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.show-item strong { display: block; font-size: 0.92rem; font-weight: 600; color: var(--text); }
+.show-item .queue-duration { display: block; margin-top: 2px; }
+.show-item .queue-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.show-item .queue-actions button { width: auto; min-height: 0; padding: 7px 12px; font-size: 0.8rem; }
+
+/* Room-not-found overlay */
+.room-missing {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.room-missing[data-visible="true"] { display: flex; }
+
+.room-missing-card {
+  text-align: center;
+  max-width: 420px;
+  display: grid;
+  gap: 14px;
+  justify-items: center;
+}
+
+.room-missing-card h1 { font-size: 1.6rem; font-weight: 800; color: var(--text); }
+.room-missing-card p { color: var(--text-2); font-size: 0.95rem; line-height: 1.5; }
+.room-missing-card a { text-decoration: none; padding: 11px 22px; width: auto; }
+
+/* Anchors styled as buttons (lobby / overlays). The button colour rules are
+   scoped to <button>, so links need their own copy. */
+a.primary, a.secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 100ms, background 140ms, border-color 140ms, box-shadow 140ms;
+}
+
+a.primary:hover, a.secondary:hover { transform: translateY(-1px); }
+
+a.primary {
+  background: var(--accent);
+  color: #0c0e12;
+  border-color: var(--accent);
+  box-shadow: 0 4px 18px var(--accent-glow);
+}
+a.primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+
+a.secondary {
+  background: rgba(255, 255, 255, 0.046);
+  color: var(--text);
+  border-color: var(--panel-border-hi);
+}
+a.secondary:hover { background: rgba(255, 255, 255, 0.082); border-color: rgba(255, 255, 255, 0.15); }
