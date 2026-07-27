@@ -83,6 +83,13 @@ When `CONTROL_PASSCODE` is set it protects **creating/listing/deleting Shows and
 controlling the default `main` Show**. Controlling any other Show needs only its
 link. All displays (`/stage`) stay open.
 
+The lobby at `/` also puts a password screen in front of the page when a
+passcode is configured: it must be entered before the lobby is usable, and is
+then remembered on that device (and reused for the control actions, so it is
+only asked once). It is a front-door gate — the real enforcement is the
+server-side checks above — and it deliberately does not cover `/stage` or Show
+display links, which must open without a password on venue screens.
+
 `GET /healthz` returns process uptime, Show count, and connected display count.
 
 ## Deployment

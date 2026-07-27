@@ -976,13 +976,30 @@ function forgetRoom(id) {
   }
 }
 
+// Checks a passcode against the server WITHOUT the 401 prompt in controlFetch.
+// GET /api/rooms is passcode-gated and read-only, so a 200 means the passcode
+// is correct (and, when no passcode is configured, it's open and returns 200).
+async function verifyPasscode(pass) {
+  try {
+    const res = await fetch("/api/rooms", { headers: pass ? { "x-control-passcode": pass } : {} });
+    return res.status === 200;
+  } catch (_) {
+    return false;
+  }
+}
+
 function bindLobby() {
   const createForm = document.querySelector("[data-create-room]");
   const roomNameInput = document.querySelector("#newRoomName");
   const roomList = document.querySelector("[data-room-list]");
   const toast = document.querySelector("[data-toast]");
   const showAllBtn = document.querySelector("[data-show-all-rooms]");
+  const gate = document.querySelector("[data-lobby-gate]");
+  const gateForm = document.querySelector("[data-lobby-gate-form]");
+  const gateInput = document.querySelector("#lobbyPassword");
+  const gateError = document.querySelector("[data-lobby-gate-error]");
   let toastTimer = null;
+  let opened = false;
 
   function showToast(message, kind = "error") {
     if (!toast) return;
@@ -1068,7 +1085,45 @@ function bindLobby() {
     });
   }
 
-  renderRecent();
+  /* ── Password gate ── */
+  function openLobby() {
+    if (opened) return;
+    opened = true;
+    if (gate) gate.hidden = true;
+    renderRecent();
+  }
+
+  if (gateForm) {
+    gateForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const entered = (gateInput.value || "").trim();
+      if (!entered) return;
+      if (await verifyPasscode(entered)) {
+        rememberPasscode(entered);
+        if (gateError) gateError.hidden = true;
+        openLobby();
+      } else {
+        if (gateError) gateError.hidden = false;
+        gateInput.select();
+      }
+    });
+  }
+
+  (async () => {
+    // Skip the gate entirely if no passcode is configured on the server.
+    let required = true;
+    try {
+      const cfg = await (await fetch("/api/config")).json();
+      required = Boolean(cfg.passcodeRequired);
+    } catch (_) {
+      /* assume gated on error — fail closed for the view */
+    }
+    if (!required || (await verifyPasscode(storedPasscode()))) {
+      openLobby();
+    } else if (gateInput) {
+      gateInput.focus();
+    }
+  })();
 }
 
 if (document.body.matches(".lobby-body")) {

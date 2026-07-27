@@ -1629,3 +1629,57 @@ a.secondary {
   border-color: var(--panel-border-hi);
 }
 a.secondary:hover { background: rgba(255, 255, 255, 0.082); border-color: rgba(255, 255, 255, 0.15); }
+
+/* ─── Lobby password gate ───────────────────────────────────────────────────── */
+.lobby-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse 75% 55% at 50% 0%, rgba(240, 180, 41, 0.08) 0%, transparent 55%),
+    var(--bg);
+}
+
+/* [hidden] must beat the display:flex above */
+.lobby-gate[hidden] { display: none; }
+
+.lobby-gate-card {
+  width: min(400px, 100%);
+  display: grid;
+  gap: 14px;
+  justify-items: stretch;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--r-xl);
+  padding: 34px 30px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+}
+
+.lobby-gate-card h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.lobby-gate-card p {
+  color: var(--text-2);
+  font-size: 0.9rem;
+  margin-top: -6px;
+}
+
+.lobby-gate-card input {
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.lobby-gate-error {
+  color: var(--danger) !important;
+  font-weight: 600;
+  margin-top: 0;
+}

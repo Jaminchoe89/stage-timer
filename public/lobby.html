@@ -10,6 +10,20 @@
   <body class="lobby-body">
     <div class="toast" data-toast data-visible="false" data-kind="error" role="status" aria-live="polite"></div>
 
+    <!-- Password gate. Opaque and shown by default so the lobby never flashes
+         before it's unlocked; JS hides it once the passcode checks out (or if
+         no CONTROL_PASSCODE is configured). -->
+    <div class="lobby-gate" data-lobby-gate>
+      <form class="lobby-gate-card" data-lobby-gate-form>
+        <h1>Stage Timer</h1>
+        <p>Enter the password to continue.</p>
+        <input type="password" id="lobbyPassword" name="lobbyPassword"
+               autocomplete="current-password" placeholder="Password" autofocus>
+        <button class="primary" type="submit">Enter</button>
+        <p class="lobby-gate-error" data-lobby-gate-error hidden>Incorrect password — try again.</p>
+      </form>
+    </div>
+
     <main class="lobby-shell">
       <header class="lobby-header">
         <h1>Stage Timer</h1>
